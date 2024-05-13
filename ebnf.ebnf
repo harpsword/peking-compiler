@@ -11,4 +11,6 @@ UnaryExp  ::= PrimaryExp | UnaryOp UnaryExp;
 
 PrimaryExp ::= "(" Exp ")" | Number;
 
+UnaryOp ::= "+" | "-" | "!";
+
 Number    ::= INT_CONST;

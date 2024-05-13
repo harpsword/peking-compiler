@@ -11,6 +11,8 @@ mod ast;
 mod parser;
 mod ir_enhance;
 
+mod tests;
+
 lalrpop_mod!(sysy);
 
 fn main() -> Result<()> {
