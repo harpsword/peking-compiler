@@ -26,12 +26,10 @@ impl GenerateRiscV for FunctionData {
                 let value_data = self.dfg().value(inst);
 
                 match value_data.kind() {
-                    koopa::ir::ValueKind::Integer(int) => {
-
-                    },
+                    koopa::ir::ValueKind::Integer(int) => {}
                     koopa::ir::ValueKind::Return(r) => {
                         result.push_str(&r.generate_riscv());
-                    },
+                    }
                     _ => unreachable!(),
                 }
             }
@@ -58,6 +56,6 @@ impl GenerateRiscV for values::Integer {
 
 impl GenerateRiscV for values::Return {
     fn generate_riscv(&self) -> String {
-        return "  li a0, 0\n  ret".to_owned()
+        return "  li a0, 0\n  ret".to_owned();
     }
 }

@@ -1,12 +1,9 @@
 use koopa::ir::Program;
 
 use crate::{ast, sysy};
-use std::{fs::read_to_string, io::Result};
-
-
+use std::{fs::read_to_string, io::Result, path::PathBuf};
 
 pub struct SysyParser {
-    mode: String,
     file: String,
 
     // result
@@ -15,11 +12,10 @@ pub struct SysyParser {
 }
 
 impl SysyParser {
-    pub fn new(mode: String, input_file_name: String) -> Result<Self> {
+    pub fn new(input_file_name: PathBuf) -> Result<Self> {
         let file = read_to_string(input_file_name)?;
 
         Ok(Self {
-            mode: mode,
             file: file,
 
             ast: Option::None,
