@@ -1,5 +1,7 @@
 use koopa::ir::{entities::ValueData, values, FunctionData, Program, ValueKind};
 
+mod ir_builder;
+
 pub(crate) trait GenerateRiscV {
     fn generate_riscv(&self) -> String;
 }

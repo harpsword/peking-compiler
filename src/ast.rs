@@ -1,6 +1,4 @@
-// use koopa::ir::{builder::{BasicBlockBuilder, ValueBuilder}, entities::BasicBlockData, BasicBlock, Function, FunctionData, Program, Type};
-
-use koopa::ir::{builder::EntityInfoQuerier, builder_traits::*, *};
+use koopa::ir::{builder_traits::*, *};
 
 #[derive(Debug)]
 pub struct CompUnit {
@@ -54,14 +52,50 @@ impl Block {
             .basic_block(Some("@entry".to_owned()));
         func_data.layout_mut().bbs_mut().push_key_back(bb);
 
-        let stmt = func_data.dfg_mut().new_value().integer(self.stmt.num);
-        let ret = func_data.dfg_mut().new_value().ret(Some(stmt));
+        unimplemented!("build IR for Block");
 
-        func_data.layout_mut().bb_mut(bb).insts_mut().extend([ret]);
+        // let stmt = func_data.dfg_mut().new_value().integer(self.stmt.num);
+        // let ret = func_data.dfg_mut().new_value().ret(Some(stmt));
+
+        // func_data.layout_mut().bb_mut(bb).insts_mut().extend([ret]);
     }
 }
 
 #[derive(Debug)]
+pub enum UnaryOp {
+    Plus,
+    Minus,
+    Not,
+}
+
+#[derive(Debug)]
 pub struct Stmt {
-    pub num: i32,
+    pub exp: Box<Exp>,
+}
+
+impl Stmt {
+    pub fn build_ir(&self, func_data: &mut FunctionData, bb: BasicBlock) {
+        // TODO
+        unimplemented!();
+        let stmt = func_data.dfg_mut().new_value().integer(33);
+        func_data.layout_mut().bb_mut(bb).insts_mut().extend([stmt]);
+    }
+}
+
+#[derive(Debug)]
+pub struct Exp {
+    pub unary_exp: Box<UnaryExp>,
+}
+
+#[derive(Debug)]
+pub enum UnaryExp {
+    PrimaryExp(Box<PrimaryExp>),
+    UnaryOpAndExp(UnaryOp, Box<UnaryExp>),
+}
+
+#[derive(Debug)]
+pub enum PrimaryExp {
+    // ( Expr )
+    Exp(Box<Exp>),
+    Number(i32),
 }
