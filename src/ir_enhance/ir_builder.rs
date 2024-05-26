@@ -6,7 +6,7 @@ use koopa::{
     },
 };
 
-struct ProgramBuilder {
+pub(crate) struct ProgramBuilder {
     program: Program,
 }
 
@@ -28,7 +28,7 @@ impl ProgramBuilder {
     }
 }
 
-struct FunctionBuilder<'a> {
+pub(crate) struct FunctionBuilder<'a> {
     func_data: &'a mut FunctionData,
 }
 
@@ -49,7 +49,7 @@ impl<'a> FunctionBuilder<'a> {
     }
 }
 
-struct BlockBuilder<'a> {
+pub(crate) struct BlockBuilder<'a> {
     func_data: &'a mut FunctionData,
     bb: BasicBlock,
 }

@@ -8,12 +8,12 @@ use std::{env::args, fs::read_to_string};
 use koopa::back::KoopaGenerator;
 use lalrpop_util::lalrpop_mod;
 
-use crate::ir_enhance::GenerateRiscV;
 use crate::parser::SysyParser;
 
 mod ast;
 mod ir_enhance;
 mod parser;
+pub(crate) mod riscv;
 
 mod tests;
 
@@ -68,7 +68,7 @@ fn main() -> Result<()> {
     let ir = parser.get_ir().unwrap();
 
     let output = if args.output_riscv {
-        ir.generate_riscv()
+        ir_enhance::generate_riscv(ir)
     } else {
         let mut gen = KoopaGenerator::new(Vec::new());
         gen.generate_on(&ir).unwrap();
