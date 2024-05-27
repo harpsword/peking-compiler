@@ -11,6 +11,10 @@ impl RiskVCode {
         self.insts.push(inst.into());
     }
 
+    pub(crate) fn append_instr<V: Into<String>>(&mut self, inst: V) {
+        self.insts.push("  ".to_owned() + &inst.into());
+    }
+
     // fn append_string(&mut self, inst: String) {
     //     self.append(inst);
     // }

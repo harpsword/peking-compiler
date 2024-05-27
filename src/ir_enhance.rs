@@ -5,7 +5,7 @@ use koopa::ir::{
     values::{self, Binary},
     Function, FunctionData, Program, Value, ValueKind,
 };
-use once_cell::sync::{Lazy, OnceCell};
+use once_cell::sync::Lazy;
 
 use crate::riscv::RiskVCode;
 
@@ -132,7 +132,7 @@ impl RiscvGenerator {
                 } else {
                     let register = self.assign_register();
                     self.result
-                        .append(format!("  li {}, {}", register, x.value()));
+                        .append_instr(format!("li {}, {}", register, x.value()));
                     Some(register)
                 }
             }
@@ -141,44 +141,52 @@ impl RiscvGenerator {
                     let register = self
                         .generate_riscv_for_instruction(func, return_value)
                         .unwrap();
-                    self.result.append(format!("  mv {}, {}", "a0", register));
+                    self.result.append_instr(format!("mv {}, {}", "a0", register));
                 }
-                self.result.append("  ret");
+                self.result.append_instr("ret");
                 None
             }
             ValueKind::Binary(binary) => {
                 // only need to support Eq and Sub
+                let lhs_register = self
+                    .generate_riscv_for_instruction(func, binary.lhs())
+                    .unwrap();
+                let rhs_register = self
+                    .generate_riscv_for_instruction(func, binary.rhs())
+                    .unwrap();
                 match binary.op() {
                     values::BinaryOp::Eq => {
-                        let lhs_register = self
-                            .generate_riscv_for_instruction(func, binary.lhs())
-                            .unwrap();
-                        let rhs_register = self
-                            .generate_riscv_for_instruction(func, binary.rhs())
-                            .unwrap();
-
-                        self.result.append(format!(
-                            "  xor {}, {}, {}",
+                        self.result.append_instr(format!(
+                            "xor {}, {}, {}",
                             lhs_register, lhs_register, rhs_register
                         ));
                         self.result
-                            .append(format!("  seqz {}, {}", lhs_register, lhs_register));
+                            .append_instr(format!("seqz {}, {}", lhs_register, lhs_register));
                         Some(lhs_register)
                     }
                     values::BinaryOp::Sub => {
-                        let lhs_register = self
-                            .generate_riscv_for_instruction(func, binary.lhs())
-                            .unwrap();
-                        let rhs_register = self
-                            .generate_riscv_for_instruction(func, binary.rhs())
-                            .unwrap();
                         let destination_register = self.assign_register();
-                        self.result.append(format!(
-                            "  sub {}, {}, {}",
+                        self.result.append_instr(format!(
+                            "sub {}, {}, {}",
                             destination_register, lhs_register, rhs_register
                         ));
                         Some(destination_register)
                     }
+                    values::BinaryOp::Add => {
+                        self.result.append_instr(format!("add {}, {}, {}", rhs_register, lhs_register, rhs_register));
+                        Some(rhs_register)
+                    }
+                    values::BinaryOp::Mul => {
+                        self.result.append_instr(format!("mul {}, {}, {}", rhs_register, lhs_register, rhs_register));
+                        Some(rhs_register)
+                    }
+                    values::BinaryOp::Div => {
+                        unimplemented!()
+                    }
+                    values::BinaryOp::Mod => {
+                        unimplemented!()
+                    }
+
                     _ => unreachable!(),
                 }
             }

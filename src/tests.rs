@@ -10,18 +10,18 @@ mod test {
     use koopa::ir::{builder::EntityInfoQuerier, builder_traits::*, *};
 
     #[test]
-    fn test_all() {
+    fn test_parse() {
         let env = Env::default().filter_or("LOG_LEVEL", "info");
         env_logger::init_from_env(env);
 
         let mode = "-koopa".to_owned();
-        let input = "input/expr1.c".to_owned();
-        // let input = "hello.c".to_owned();
+        let input = "input/expr2.c".to_owned();
         let mut parser = SysyParser::new(input.into()).unwrap();
 
         parser.generate_ast();
 
         let ast = parser.ast.as_ref().unwrap();
+        println!("ast: {:#?}", ast);
 
         {
             let ir = parser.get_ir().unwrap();

@@ -80,12 +80,93 @@ impl Stmt {
 
 #[derive(Debug)]
 pub struct Exp {
-    pub unary_exp: Box<UnaryExp>,
+    pub add_exp: Box<AddExp>,
 }
 
 impl Exp {
     pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
-        self.unary_exp.build_ir(block_builder)
+        self.add_exp.build_ir(block_builder)
+    }
+}
+
+#[derive(Debug)]
+pub enum AddExp {
+    MulExp(Box<MulExp>),
+    AddExpOpMulExp(Box<AddExp>, AddOp, Box<MulExp>),
+}
+
+impl AddExp {
+    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
+        match self {
+            AddExp::MulExp(exp) => {
+                return exp.build_ir(block_builder);
+            }
+            AddExp::AddExpOpMulExp(lhs, op, rhs) => {
+                let lhs = lhs.build_ir(block_builder);
+                let rhs = rhs.build_ir(block_builder);
+                let op = op.clone().into();
+                let exp = block_builder.new_value().binary(op, lhs, rhs);
+                block_builder.extend([exp]);
+                return exp;
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum MulExp {
+    UnaryExp(Box<UnaryExp>),
+
+    MulExpOpUnaryExp(Box<MulExp>, MulOp, Box<UnaryExp>),
+}
+
+impl MulExp {
+    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
+        match self {
+            MulExp::UnaryExp(unary) => {
+                return unary.build_ir(block_builder);
+            }
+            MulExp::MulExpOpUnaryExp(lhs, op, rhs) => {
+                let lhs = lhs.build_ir(block_builder);
+                let rhs = rhs.build_ir(block_builder);
+                let op = op.clone().into();
+                let exp = block_builder.new_value().binary(op, lhs, rhs);
+                block_builder.extend([exp]);
+                return exp;
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum MulOp {
+    Mul, // *
+    Div, // /
+    Mod, // %
+}
+
+impl Into<BinaryOp> for MulOp {
+    fn into(self) -> BinaryOp {
+        match self {
+            MulOp::Mul => BinaryOp::Mul,
+            MulOp::Div => BinaryOp::Div,
+            MulOp::Mod => BinaryOp::Mod,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum AddOp {
+    Plus,  // +
+    Minus, // -
+}
+
+impl Into<BinaryOp> for AddOp {
+    fn into(self) -> BinaryOp {
+        match self {
+            AddOp::Plus => BinaryOp::Add,
+            AddOp::Minus => BinaryOp::Sub,
+        }
     }
 }
 

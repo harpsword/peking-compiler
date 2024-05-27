@@ -5,7 +5,11 @@ FuncType  ::= "int";
 
 Block     ::= "{" Stmt "}";
 Stmt      ::= "return" Exp ";";
-Exp       ::= UnaryExp;
+Exp       ::= AddExp;
+
+MulExp ::= UnaryExp | MulExp ("*" | "/" | "%") MulExp;
+
+AddExp ::= MulExp | AddExp ("+" | "-") MulExp;  
 
 UnaryExp  ::= PrimaryExp | UnaryOp UnaryExp;
 
