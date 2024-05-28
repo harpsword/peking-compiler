@@ -164,6 +164,16 @@ impl RiscvGenerator {
                             .append(Instruction::Seqz(&lhs_register, &lhs_register));
                         Some(lhs_register)
                     }
+                    values::BinaryOp::NotEq => {
+                        self.result.append(Instruction::Xor(
+                            &lhs_register,
+                            &lhs_register,
+                            &rhs_register,
+                        ));
+                        self.result
+                            .append(Instruction::Snez(&lhs_register, &lhs_register));
+                        Some(lhs_register)
+                    }
                     values::BinaryOp::Sub => {
                         let destination_register = self.assign_register();
                         self.result.append(Instruction::Sub(
@@ -190,20 +200,38 @@ impl RiscvGenerator {
                         Some(rhs_register)
                     }
                     values::BinaryOp::Div => {
-                        unimplemented!()
+                        self.result.append(Instruction::Div(
+                            &rhs_register,
+                            &lhs_register,
+                            &rhs_register,
+                        ));
+                        Some(rhs_register)
                     }
                     values::BinaryOp::Mod => {
-                        unimplemented!()
+                        self.result.append(Instruction::Rem(
+                            &rhs_register,
+                            &lhs_register,
+                            &rhs_register,
+                        ));
+                        Some(rhs_register)
                     }
                     values::BinaryOp::Or => {
-                        unimplemented!()
+                        self.result.append(Instruction::Or(
+                            &rhs_register,
+                            &lhs_register,
+                            &rhs_register,
+                        ));
+                        Some(rhs_register)
                     }
                     values::BinaryOp::And => {
-                        unimplemented!()
+                        self.result.append(Instruction::And(
+                            &rhs_register,
+                            &lhs_register,
+                            &rhs_register,
+                        ));
+                        Some(rhs_register)
                     }
-                    values::BinaryOp::NotEq => {
-                        unimplemented!()
-                    }
+
                     values::BinaryOp::Gt => {
                         self.result.append(Instruction::Slt(
                             &lhs_register,

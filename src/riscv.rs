@@ -25,7 +25,6 @@ pub(crate) enum Instruction<'a> {
     Slt(&'a str, &'a str, &'a str),
 
     Xor(&'a str, &'a str, &'a str),
-
     // dst = ls xor rs
     // rs should be a number
     // Common paradigms
@@ -34,17 +33,21 @@ pub(crate) enum Instruction<'a> {
 
     // set dst to 1 if src is zero
     Seqz(&'a str, &'a str),
+    // set dst to 1 if src is not zero
+    Snez(&'a str, &'a str),
 
     Add(&'a str, &'a str, &'a str),
-
-    Mul(&'a str, &'a str, &'a str),
-
     Sub(&'a str, &'a str, &'a str),
+    Mul(&'a str, &'a str, &'a str),
+    Div(&'a str, &'a str, &'a str),
+    // get remainder
+    Rem(&'a str, &'a str, &'a str),
+
+    And(&'a str, &'a str, &'a str),
+    Or(&'a str, &'a str, &'a str),
 
     Li(&'a str, i32),
-
     Mov(&'a str, &'a str),
-
     Ret,
 }
 
@@ -52,12 +55,23 @@ impl<'a> Into<String> for Instruction<'a> {
     fn into(self) -> String {
         match self {
             Instruction::Slt(dst, lhs, rhs) => format!("  slt {dst}, {lhs}, {rhs}"),
+
             Instruction::Xori(ds, ls, rs) => format!("  xori {ds}, {ls}, {rs}"),
             Instruction::Xor(dst, lhs, rhs) => format!("  xor {dst}, {lhs}, {rhs}"),
+
             Instruction::Seqz(dst, src) => format!("  sltiu {dst}, {src}, 1"),
+            // sltu dst, x0, src means dst = 0 < src
+            Instruction::Snez(dst, src) => format!("  sltu {dst}, x0, {src}"),
+
             Instruction::Add(dst, lhs, rhs) => format!("  add {dst}, {lhs}, {rhs}"),
-            Instruction::Mul(dst, lhs, rhs) => format!("  mul {dst}, {lhs}, {rhs}"),
             Instruction::Sub(dst, lhs, rhs) => format!("  sub {dst}, {lhs}, {rhs}"),
+            Instruction::Mul(dst, lhs, rhs) => format!("  mul {dst}, {lhs}, {rhs}"),
+            Instruction::Div(dst, lhs, rhs) => format!("  div {dst}, {lhs}, {rhs}"),
+            Instruction::Rem(dst, lhs, rhs) => format!("  rem {dst}, {lhs}, {rhs}"),
+
+            Instruction::And(dst, lhs, rhs) => format!("  and {dst}, {lhs}, {rhs}"),
+            Instruction::Or(dst, lhs, rhs) => format!("  or {dst}, {lhs}, {rhs}"),
+
             Instruction::Li(dst, src) => format!("  li {dst}, {src}"),
             Instruction::Mov(dst, src) => format!("  mv {dst}, {src}"),
             Instruction::Ret => format!("  ret"),

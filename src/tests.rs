@@ -31,8 +31,8 @@ mod test {
 
             println!("IR: \n {}", text_form_ir);
 
-            // let riscv = generate_riscv(ir);
-            // println!("RISC-V: \n{}", riscv);
+            let riscv = generate_riscv(ir);
+            println!("RISC-V: \n{}", riscv);
         }
     }
 
