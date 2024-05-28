@@ -15,7 +15,7 @@ mod test {
         env_logger::init_from_env(env);
 
         let mode = "-koopa".to_owned();
-        let input = "input/expr2.c".to_owned();
+        let input = "input/expr3.c".to_owned();
         let mut parser = SysyParser::new(input.into()).unwrap();
 
         parser.generate_ast();
@@ -31,8 +31,8 @@ mod test {
 
             println!("IR: \n {}", text_form_ir);
 
-            let riscv = generate_riscv(ir);
-            println!("RISC-V: \n{}", riscv);
+            // let riscv = generate_riscv(ir);
+            // println!("RISC-V: \n{}", riscv);
         }
     }
 

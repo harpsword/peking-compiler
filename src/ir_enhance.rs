@@ -7,7 +7,7 @@ use koopa::ir::{
 };
 use once_cell::sync::Lazy;
 
-use crate::riscv::RiskVCode;
+use crate::riscv::{Instruction, RiskVCode};
 
 pub(crate) mod ir_builder;
 
@@ -131,8 +131,7 @@ impl RiscvGenerator {
                     Some("x0".to_string())
                 } else {
                     let register = self.assign_register();
-                    self.result
-                        .append_instr(format!("li {}, {}", register, x.value()));
+                    self.result.append(Instruction::Li(&register, x.value()));
                     Some(register)
                 }
             }
@@ -141,9 +140,9 @@ impl RiscvGenerator {
                     let register = self
                         .generate_riscv_for_instruction(func, return_value)
                         .unwrap();
-                    self.result.append_instr(format!("mv {}, {}", "a0", register));
+                    self.result.append(Instruction::Mov("a0", &register));
                 }
-                self.result.append_instr("ret");
+                self.result.append(Instruction::Ret);
                 None
             }
             ValueKind::Binary(binary) => {
@@ -156,28 +155,38 @@ impl RiscvGenerator {
                     .unwrap();
                 match binary.op() {
                     values::BinaryOp::Eq => {
-                        self.result.append_instr(format!(
-                            "xor {}, {}, {}",
-                            lhs_register, lhs_register, rhs_register
+                        self.result.append(Instruction::Xor(
+                            &lhs_register,
+                            &lhs_register,
+                            &rhs_register,
                         ));
                         self.result
-                            .append_instr(format!("seqz {}, {}", lhs_register, lhs_register));
+                            .append(Instruction::Seqz(&lhs_register, &lhs_register));
                         Some(lhs_register)
                     }
                     values::BinaryOp::Sub => {
                         let destination_register = self.assign_register();
-                        self.result.append_instr(format!(
-                            "sub {}, {}, {}",
-                            destination_register, lhs_register, rhs_register
+                        self.result.append(Instruction::Sub(
+                            &destination_register,
+                            &lhs_register,
+                            &rhs_register,
                         ));
                         Some(destination_register)
                     }
                     values::BinaryOp::Add => {
-                        self.result.append_instr(format!("add {}, {}, {}", rhs_register, lhs_register, rhs_register));
+                        self.result.append(Instruction::Add(
+                            &rhs_register,
+                            &lhs_register,
+                            &rhs_register,
+                        ));
                         Some(rhs_register)
                     }
                     values::BinaryOp::Mul => {
-                        self.result.append_instr(format!("mul {}, {}, {}", rhs_register, lhs_register, rhs_register));
+                        self.result.append(Instruction::Mul(
+                            &rhs_register,
+                            &lhs_register,
+                            &rhs_register,
+                        ));
                         Some(rhs_register)
                     }
                     values::BinaryOp::Div => {
@@ -185,6 +194,51 @@ impl RiscvGenerator {
                     }
                     values::BinaryOp::Mod => {
                         unimplemented!()
+                    }
+                    values::BinaryOp::Or => {
+                        unimplemented!()
+                    }
+                    values::BinaryOp::And => {
+                        unimplemented!()
+                    }
+                    values::BinaryOp::NotEq => {
+                        unimplemented!()
+                    }
+                    values::BinaryOp::Gt => {
+                        self.result.append(Instruction::Slt(
+                            &lhs_register,
+                            &rhs_register,
+                            &lhs_register,
+                        ));
+                        Some(lhs_register)
+                    }
+                    values::BinaryOp::Lt => {
+                        self.result.append(Instruction::Slt(
+                            &rhs_register,
+                            &lhs_register,
+                            &rhs_register,
+                        ));
+                        Some(rhs_register)
+                    }
+                    values::BinaryOp::Ge => {
+                        self.result.append(Instruction::Slt(
+                            &rhs_register,
+                            &lhs_register,
+                            &rhs_register,
+                        ));
+                        self.result
+                            .append(Instruction::Xori(&rhs_register, &rhs_register, 1));
+                        Some(rhs_register)
+                    }
+                    values::BinaryOp::Le => {
+                        self.result.append(Instruction::Slt(
+                            &lhs_register,
+                            &rhs_register,
+                            &lhs_register,
+                        ));
+                        self.result
+                            .append(Instruction::Xori(&lhs_register, &lhs_register, 1));
+                        Some(lhs_register)
                     }
 
                     _ => unreachable!(),

@@ -1,3 +1,5 @@
+use std::ops::Add;
+
 use crate::ir_enhance::ir_builder::*;
 use koopa::ir::{builder_traits::*, *};
 use log::info;
@@ -80,12 +82,138 @@ impl Stmt {
 
 #[derive(Debug)]
 pub struct Exp {
-    pub add_exp: Box<AddExp>,
+    pub l_or_exp: Box<LOrExp>,
 }
 
 impl Exp {
     pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
-        self.add_exp.build_ir(block_builder)
+        self.l_or_exp.build_ir(block_builder)
+    }
+}
+
+#[derive(Debug)]
+pub enum LOrExp {
+    LAndExp(Box<LAndExp>),
+    // op always be "||"
+    LOrExpOpLAndExp(Box<LOrExp>, Box<LAndExp>),
+}
+
+impl LOrExp {
+    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
+        match self {
+            LOrExp::LAndExp(l_and_exp) => l_and_exp.build_ir(block_builder),
+            LOrExp::LOrExpOpLAndExp(l_or_exp, l_and_exp) => {
+                let l_or_exp = l_or_exp.build_ir(block_builder);
+                let l_and_exp = l_and_exp.build_ir(block_builder);
+                let exp = block_builder
+                    .new_value()
+                    .binary(BinaryOp::Or, l_or_exp, l_and_exp);
+                block_builder.extend([exp]);
+                return exp;
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum LAndExp {
+    EqExp(Box<EqExp>),
+    // op always be "&&"
+    LAndExpOpEqExp(Box<LAndExp>, Box<EqExp>),
+}
+
+impl LAndExp {
+    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
+        match self {
+            LAndExp::EqExp(eq_exp) => eq_exp.build_ir(block_builder),
+            LAndExp::LAndExpOpEqExp(l_and_exp, eq_exp) => {
+                let l_and_exp = l_and_exp.build_ir(block_builder);
+                let eq_exp = eq_exp.build_ir(block_builder);
+                let exp = block_builder
+                    .new_value()
+                    .binary(BinaryOp::And, l_and_exp, eq_exp);
+                block_builder.extend([exp]);
+                return exp;
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum EqExp {
+    RelExp(Box<RelExp>),
+    EqExpOpRelExp(Box<EqExp>, EqExpOp, Box<RelExp>),
+}
+
+impl EqExp {
+    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
+        match self {
+            EqExp::RelExp(rel_exp) => rel_exp.build_ir(block_builder),
+            EqExp::EqExpOpRelExp(eq_exp, op, rel_exp) => {
+                let eq_exp = eq_exp.build_ir(block_builder);
+                let rel_exp = rel_exp.build_ir(block_builder);
+                let op = op.clone().into();
+                let exp = block_builder.new_value().binary(op, eq_exp, rel_exp);
+                block_builder.extend([exp]);
+                return exp;
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum EqExpOp {
+    Eq, // ==
+    Ne, // !=
+}
+
+impl Into<BinaryOp> for EqExpOp {
+    fn into(self) -> BinaryOp {
+        match self {
+            EqExpOp::Eq => BinaryOp::Eq,
+            EqExpOp::Ne => BinaryOp::NotEq,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum RelExp {
+    AddExp(Box<AddExp>),
+    RelExpOpAddExp(Box<RelExp>, RelExpOp, Box<AddExp>),
+}
+
+impl RelExp {
+    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
+        match self {
+            RelExp::AddExp(add_exp) => add_exp.build_ir(block_builder),
+            RelExp::RelExpOpAddExp(rel_exp, op, add_exp) => {
+                let rel_exp = rel_exp.build_ir(block_builder);
+                let add_exp = add_exp.build_ir(block_builder);
+                let op = op.clone().into();
+                let exp = block_builder.new_value().binary(op, rel_exp, add_exp);
+                block_builder.extend([exp]);
+                return exp;
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum RelExpOp {
+    Gt, // >
+    Lt, // <
+    Ge, // >=
+    Le, // <=
+}
+
+impl Into<BinaryOp> for RelExpOp {
+    fn into(self) -> BinaryOp {
+        match self {
+            RelExpOp::Gt => BinaryOp::Gt,
+            RelExpOp::Lt => BinaryOp::Lt,
+            RelExpOp::Ge => BinaryOp::Ge,
+            RelExpOp::Le => BinaryOp::Le,
+        }
     }
 }
 
