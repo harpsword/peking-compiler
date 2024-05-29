@@ -165,32 +165,39 @@ impl RiscvGenerator {
                     .unwrap();
                 let destination_register = if lhs_register == "x0" && rhs_register == "x0" {
                     self.assign_register()
-                } else {
+                } else if lhs_register == "x0" {
                     rhs_register.clone()
+                } else {
+                    // rhs_register == "x0"
+                    // or all is not "x0"
+                    lhs_register.clone()
                 };
                 match binary.op() {
                     values::BinaryOp::Eq => {
                         self.result.append(Instruction::Xor(
-                            &lhs_register,
+                            &destination_register,
                             &lhs_register,
                             &rhs_register,
                         ));
-                        self.result
-                            .append(Instruction::Seqz(&lhs_register, &lhs_register));
-                        Some(lhs_register)
+                        self.result.append(Instruction::Seqz(
+                            &destination_register,
+                            &destination_register,
+                        ));
+                        Some(destination_register)
                     }
                     values::BinaryOp::NotEq => {
                         self.result.append(Instruction::Xor(
-                            &lhs_register,
+                            &destination_register,
                             &lhs_register,
                             &rhs_register,
                         ));
-                        self.result
-                            .append(Instruction::Snez(&lhs_register, &lhs_register));
-                        Some(lhs_register)
+                        self.result.append(Instruction::Snez(
+                            &destination_register,
+                            &destination_register,
+                        ));
+                        Some(destination_register)
                     }
                     values::BinaryOp::Sub => {
-                        let destination_register = self.assign_register();
                         self.result.append(Instruction::Sub(
                             &destination_register,
                             &lhs_register,
@@ -200,88 +207,94 @@ impl RiscvGenerator {
                     }
                     values::BinaryOp::Add => {
                         self.result.append(Instruction::Add(
-                            &rhs_register,
+                            &destination_register,
                             &lhs_register,
                             &rhs_register,
                         ));
-                        Some(rhs_register)
+                        Some(destination_register)
                     }
                     values::BinaryOp::Mul => {
                         self.result.append(Instruction::Mul(
-                            &rhs_register,
+                            &destination_register,
                             &lhs_register,
                             &rhs_register,
                         ));
-                        Some(rhs_register)
+                        Some(destination_register)
                     }
                     values::BinaryOp::Div => {
                         self.result.append(Instruction::Div(
-                            &rhs_register,
+                            &destination_register,
                             &lhs_register,
                             &rhs_register,
                         ));
-                        Some(rhs_register)
+                        Some(destination_register)
                     }
                     values::BinaryOp::Mod => {
                         self.result.append(Instruction::Rem(
-                            &rhs_register,
+                            &destination_register,
                             &lhs_register,
                             &rhs_register,
                         ));
-                        Some(rhs_register)
+                        Some(destination_register)
                     }
                     values::BinaryOp::Or => {
                         self.result.append(Instruction::Or(
-                            &rhs_register,
+                            &destination_register,
                             &lhs_register,
                             &rhs_register,
                         ));
-                        Some(rhs_register)
+                        Some(destination_register)
                     }
                     values::BinaryOp::And => {
                         self.result.append(Instruction::And(
-                            &rhs_register,
+                            &destination_register,
                             &lhs_register,
                             &rhs_register,
                         ));
-                        Some(rhs_register)
+                        Some(destination_register)
                     }
 
                     values::BinaryOp::Gt => {
                         self.result.append(Instruction::Slt(
-                            &lhs_register,
+                            &destination_register,
                             &rhs_register,
                             &lhs_register,
                         ));
-                        Some(lhs_register)
+                        Some(destination_register)
                     }
                     values::BinaryOp::Lt => {
                         self.result.append(Instruction::Slt(
-                            &rhs_register,
+                            &destination_register,
                             &lhs_register,
                             &rhs_register,
                         ));
-                        Some(rhs_register)
+                        Some(destination_register)
                     }
                     values::BinaryOp::Ge => {
                         self.result.append(Instruction::Slt(
-                            &rhs_register,
+                            &destination_register,
                             &lhs_register,
                             &rhs_register,
                         ));
-                        self.result
-                            .append(Instruction::Xori(&rhs_register, &rhs_register, 1));
-                        Some(rhs_register)
+                        self.result.append(Instruction::Xori(
+                            &destination_register,
+                            &destination_register,
+                            1,
+                        ));
+                        Some(destination_register)
                     }
                     values::BinaryOp::Le => {
                         self.result.append(Instruction::Slt(
-                            &lhs_register,
+                            &destination_register,
                             &rhs_register,
                             &lhs_register,
                         ));
-                        self.result
-                            .append(Instruction::Xori(&lhs_register, &lhs_register, 1));
-                        Some(lhs_register)
+                        self.result.append(Instruction::Xori(
+                            &destination_register,
+                            &destination_register,
+                            1,
+                        ));
+                        Some(destination_register)
                     }
 
                     _ => unreachable!(),
