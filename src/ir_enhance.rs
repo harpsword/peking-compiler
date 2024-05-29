@@ -102,9 +102,19 @@ impl RiscvGenerator {
         self.result.generate_result()
     }
 
+    fn extract_func_name_from_koopa_func(func_name: &str) -> &str {
+        if func_name.starts_with("@") {
+            return &func_name[1..];
+        }
+        return func_name;
+    }
+
     fn generate_riscv_for_func(&mut self, program: &Program, func: Function) {
         let func_data = program.func(func);
-        self.result.append(format!("{}:", func_data.name()));
+
+        let func_name = Self::extract_func_name_from_koopa_func(func_data.name());
+        self.result.append(format!("{}:", func_name));
+
         for (_, node) in func_data.layout().bbs() {
             for &inst in node.insts().keys() {
                 self.generate_riscv_for_instruction(func_data, inst);
@@ -153,6 +163,11 @@ impl RiscvGenerator {
                 let rhs_register = self
                     .generate_riscv_for_instruction(func, binary.rhs())
                     .unwrap();
+                let destination_register = if lhs_register == "x0" && rhs_register == "x0" {
+                    self.assign_register()
+                } else {
+                    rhs_register.clone()
+                };
                 match binary.op() {
                     values::BinaryOp::Eq => {
                         self.result.append(Instruction::Xor(
