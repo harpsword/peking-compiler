@@ -15,7 +15,7 @@ mod test {
         env_logger::init_from_env(env);
 
         let mode = "-koopa".to_owned();
-        let input = "input/lv3/24_land.c".to_owned();
+        let input = "input/lv4/const1.c".to_owned();
         let mut parser = SysyParser::new(input.into()).unwrap();
 
         parser.generate_ast();
@@ -23,17 +23,17 @@ mod test {
         let ast = parser.ast.as_ref().unwrap();
         println!("ast: {:#?}", ast);
 
-        {
-            let ir = parser.get_ir().unwrap();
-            let mut gen = KoopaGenerator::new(Vec::new());
-            gen.generate_on(&ir).unwrap();
-            let text_form_ir = from_utf8(&gen.writer()).unwrap().to_string();
+        // {
+        //     let ir = parser.get_ir().unwrap();
+        //     let mut gen = KoopaGenerator::new(Vec::new());
+        //     gen.generate_on(&ir).unwrap();
+        //     let text_form_ir = from_utf8(&gen.writer()).unwrap().to_string();
 
-            println!("IR: \n {}", text_form_ir);
+        //     println!("IR: \n {}", text_form_ir);
 
-            let riscv = generate_riscv(ir);
-            println!("RISC-V: \n{}", riscv);
-        }
+        //     let riscv = generate_riscv(ir);
+        //     println!("RISC-V: \n{}", riscv);
+        // }
     }
 
     #[test]

@@ -1,4 +1,5 @@
 use crate::ast::*;
+use crate::ast::const_part::*;
 
 grammar;
 
@@ -10,6 +11,16 @@ match {
   r"/\*([^*]|\*[^/])*\*/" => {},  // Skip `/* comments */`
   // 剩下的情况采用默认方式处理
   _
+}
+
+Comma<T>: Vec<T> = {
+  <mut v:(<T> ",")*> <e: T> => match e {
+    None => v,
+    Some(e) => {
+      v.push(e);
+      v
+    }
+  }
 }
 
 // 定义 CompUnit, 其返回值类型为 String
@@ -24,10 +35,39 @@ FuncDef: FuncDef = {
 
 FuncType: FuncType = "int" => FuncType::Int;
 
-Block: Block = "{" <stmt: Stmt> "}" => Block { <> };
+Block: Block = "{" <block_items: BlockItem*> "}" => Block { <> };
+
+BlockItem: BlockItem = {
+  <decl: Decl> => BlockItem::Decl(decl),
+  <stmt: Stmt> => BlockItem::Stmt(stmt),
+};
+
+// --------------- DECL START ----------------
+Decl: Decl = <const_decl: ConstDecl> => Decl::ConstDecl(const_decl);
+
+ConstDecl: ConstDecl = {
+  "const" <b_type: BType> <const_def: ConstDef> <mut const_defs:("," <ConstDef>)*> ";" => {
+    const_defs.push(const_def);
+    ConstDecl { b_type, const_defs}
+  }
+};
+
+BType: BType = "int" => BType::Int;
+
+ConstDef: ConstDef = <ident: Ident> "=" <const_init_val: ConstInitVal> => {
+  ConstDef { ident, const_init_val }
+};
+
+ConstInitVal: ConstInitVal = <const_exp: ConstExp> => ConstInitVal { const_exp };
+
+ConstExp: ConstExp = <exp: Exp> => ConstExp { exp };
+
+// ---------------- DECL END ----------------
 
 Stmt: Stmt = "return" <exp: Exp> ";" => Stmt { <> };
 
+
+// --------------- EXP ----------------
 Exp: Box<Exp> = <l_or_exp: LOrExp> => Box::new(Exp{<>});
 
 LOrExp: Box<LOrExp> = {
@@ -94,7 +134,10 @@ UnaryExp: Box<UnaryExp> = {
 PrimaryExp: Box<PrimaryExp> = {
   "(" <exp: Exp> ")" => Box::new(PrimaryExp::Exp(<>)),
   <number: Number> => Box::new(PrimaryExp::Number(<>)),
+  <l_val: LVal> => Box::new(PrimaryExp::LVal(<>)),
 }
+
+LVal: LVal = <ident: Ident> => LVal { <> };
 
 AddOp: AddOp = {
   "+" => AddOp::Plus,

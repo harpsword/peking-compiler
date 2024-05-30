@@ -4,6 +4,10 @@ use crate::ir_enhance::ir_builder::*;
 use koopa::ir::{builder_traits::*, *};
 use log::info;
 
+use self::const_part::*;
+
+pub mod const_part;
+
 #[derive(Debug)]
 pub struct CompUnit {
     pub func_def: FuncDef,
@@ -44,16 +48,29 @@ pub enum FuncType {
 
 #[derive(Debug)]
 pub struct Block {
-    pub stmt: Stmt,
+    pub block_items: Vec<BlockItem>,
 }
 
 impl Block {
     pub fn build_ir(&self, func_builder: &mut FunctionBuilder) {
         let mut block_builder = func_builder.new_block(Some("@entry".to_owned()));
 
-        self.stmt.build_ir(&mut block_builder);
+        // self.stmt.build_ir(&mut block_builder);
+        unimplemented!()
     }
 }
+
+#[derive(Debug)]
+pub enum BlockItem {
+    Stmt(Stmt),
+    Decl(Decl),
+}
+
+#[derive(Debug)]
+pub enum Decl {
+    ConstDecl(ConstDecl),
+}
+
 
 #[derive(Debug)]
 pub enum UnaryOp {
@@ -339,6 +356,7 @@ pub enum PrimaryExp {
     // ( Expr )
     Exp(Box<Exp>),
     Number(i32),
+    LVal(LVal)
 }
 
 impl PrimaryExp {
@@ -346,6 +364,12 @@ impl PrimaryExp {
         match self {
             PrimaryExp::Exp(exp) => exp.build_ir(block_builder),
             PrimaryExp::Number(v) => block_builder.new_value().integer(*v),
+            PrimaryExp::LVal(_) => todo!(),
         }
     }
+}
+
+#[derive(Debug)]
+pub struct LVal {
+    pub ident: String,
 }
