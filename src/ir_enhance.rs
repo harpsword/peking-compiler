@@ -243,9 +243,17 @@ impl RiscvGenerator {
                             &lhs_register,
                             &rhs_register,
                         ));
+                        self.result.append(Instruction::Snez(
+                            &destination_register,
+                            &destination_register,
+                        ));
                         Some(destination_register)
                     }
                     values::BinaryOp::And => {
+                        self.result
+                            .append(Instruction::Snez(&lhs_register, &lhs_register));
+                        self.result
+                            .append(Instruction::Snez(&rhs_register, &rhs_register));
                         self.result.append(Instruction::And(
                             &destination_register,
                             &lhs_register,
