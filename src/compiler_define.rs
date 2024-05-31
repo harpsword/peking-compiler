@@ -3,8 +3,13 @@ use koopa::ir::Program;
 use crate::{ast, sysy};
 use std::{fs::read_to_string, io::Result, path::PathBuf};
 
+mod symbol_table;
+
 pub struct SysyCompiler {
     file: String,
+
+    // interval result
+    const_symbols: symbol_table::ConstTable,
 
     // result
     pub ast: Option<ast::CompUnit>,
@@ -18,8 +23,11 @@ impl SysyCompiler {
         Ok(Self {
             file: file,
 
+            const_symbols: symbol_table::ConstTable::new(),
+
             ast: Option::None,
             ir: Option::None,
+
         })
     }
 
