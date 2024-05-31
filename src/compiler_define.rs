@@ -3,7 +3,7 @@ use koopa::ir::Program;
 use crate::{ast, sysy};
 use std::{fs::read_to_string, io::Result, path::PathBuf};
 
-pub struct SysyParser {
+pub struct SysyCompiler {
     file: String,
 
     // result
@@ -11,7 +11,7 @@ pub struct SysyParser {
     ir: Option<koopa::ir::Program>,
 }
 
-impl SysyParser {
+impl SysyCompiler {
     pub fn new(input_file_name: PathBuf) -> Result<Self> {
         let file = read_to_string(input_file_name)?;
 
@@ -21,6 +21,10 @@ impl SysyParser {
             ast: Option::None,
             ir: Option::None,
         })
+    }
+
+    pub fn semantic_analysis(&mut self) {
+        // const value computation, should return a const value table
     }
 
     pub fn generate_ast(&mut self) {

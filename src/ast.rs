@@ -1,5 +1,3 @@
-use std::ops::Add;
-
 use crate::ir_enhance::ir_builder::*;
 use koopa::ir::{builder_traits::*, *};
 use log::info;
@@ -7,6 +5,7 @@ use log::info;
 use self::const_part::*;
 
 pub mod const_part;
+pub mod expr;
 
 #[derive(Debug)]
 pub struct CompUnit {
@@ -55,8 +54,9 @@ impl Block {
     pub fn build_ir(&self, func_builder: &mut FunctionBuilder) {
         let mut block_builder = func_builder.new_block(Some("@entry".to_owned()));
 
-        // self.stmt.build_ir(&mut block_builder);
-        unimplemented!()
+        for block_item in self.block_items.iter() {
+            block_item.build_ir(&mut block_builder);
+        }
     }
 }
 
@@ -66,9 +66,26 @@ pub enum BlockItem {
     Decl(Decl),
 }
 
+impl BlockItem {
+    pub fn build_ir(&self, block_builder: &mut BlockBuilder) {
+        match self {
+            BlockItem::Stmt(stmt) => stmt.build_ir(block_builder),
+            BlockItem::Decl(decl) => decl.build_ir(block_builder),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum Decl {
     ConstDecl(ConstDecl),
+}
+
+impl Decl {
+    pub fn build_ir(&self, block_builder: &mut BlockBuilder) {
+        match self {
+            Decl::ConstDecl(const_decl) => {},
+        }
+    }
 }
 
 

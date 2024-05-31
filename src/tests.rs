@@ -5,7 +5,7 @@ mod test {
     use koopa::back::KoopaGenerator;
     use log::log_enabled;
 
-    use crate::{ir_enhance::generate_riscv, parser::SysyParser};
+    use crate::{ir_enhance::generate_riscv, compiler_define::SysyCompiler};
 
     use koopa::ir::{builder::EntityInfoQuerier, builder_traits::*, *};
 
@@ -16,7 +16,7 @@ mod test {
 
         let mode = "-koopa".to_owned();
         let input = "input/lv4/const1.c".to_owned();
-        let mut parser = SysyParser::new(input.into()).unwrap();
+        let mut parser = SysyCompiler::new(input.into()).unwrap();
 
         parser.generate_ast();
 
