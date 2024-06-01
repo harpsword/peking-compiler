@@ -1,5 +1,9 @@
-use crate::ir_enhance::ir_builder::*;
+use crate::{ir_enhance::ir_builder::*, main};
 use koopa::ir::{builder_traits::*, *};
+
+trait ValueQuery {
+    fn get_value(&self, name: &str) -> Option<i32>;
+}
 
 #[derive(Debug)]
 pub struct Exp {
@@ -9,6 +13,10 @@ pub struct Exp {
 impl Exp {
     pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
         self.l_or_exp.build_ir(block_builder)
+    }
+
+    pub fn get_value<T: ValueQuery>(&self, vq: &T) -> i32 {
+        self.l_or_exp.get_value(vq)
     }
 }
 
@@ -34,6 +42,17 @@ impl LOrExp {
             }
         }
     }
+
+    pub fn get_value<T: ValueQuery>(&self, vq: &T) -> i32 {
+        match self {
+            LOrExp::LAndExp(l_and_exp) => l_and_exp.get_value(vq),
+            LOrExp::LOrExpOpLAndExp(l_or_exp, l_and_exp) => {
+                let lhs = l_or_exp.get_value(vq);
+                let rhs = l_and_exp.get_value(vq);
+                (lhs != 0 || rhs != 0) as i32
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -44,6 +63,17 @@ pub enum LAndExp {
 }
 
 impl LAndExp {
+    pub fn get_value<T: ValueQuery>(&self, vq: &T) -> i32 {
+        match self {
+            LAndExp::EqExp(eq_exp) => eq_exp.get_value(vq),
+            LAndExp::LAndExpOpEqExp(l_and_exp, eq_exp) => {
+                let lhs = l_and_exp.get_value(vq);
+                let rhs = eq_exp.get_value(vq);
+                (lhs != 0 && rhs != 0) as i32
+            }
+        }
+    }
+
     pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
         match self {
             LAndExp::EqExp(eq_exp) => eq_exp.build_ir(block_builder),
@@ -67,6 +97,20 @@ pub enum EqExp {
 }
 
 impl EqExp {
+    pub fn get_value<T: ValueQuery>(&self, vq: &T) -> i32 {
+        match self {
+            EqExp::RelExp(rel_exp) => rel_exp.get_value(vq),
+            EqExp::EqExpOpRelExp(eq_exp, op, rel_exp) => {
+                let lhs = eq_exp.get_value(vq);
+                let rhs = rel_exp.get_value(vq);
+                match op {
+                    EqExpOp::Eq => (lhs == rhs) as i32,
+                    EqExpOp::Ne => (lhs != rhs) as i32,
+                }
+            }
+        }
+    }
+
     pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
         match self {
             EqExp::RelExp(rel_exp) => rel_exp.build_ir(block_builder),
@@ -104,6 +148,22 @@ pub enum RelExp {
 }
 
 impl RelExp {
+    pub fn get_value<T: ValueQuery>(&self, vq: &T) -> i32 {
+        match self {
+            RelExp::AddExp(add_exp) => add_exp.get_value(vq),
+            RelExp::RelExpOpAddExp(rel_exp, op, add_exp) => {
+                let lhs = rel_exp.get_value(vq);
+                let rhs = add_exp.get_value(vq);
+                match op {
+                    RelExpOp::Gt => (lhs > rhs) as i32,
+                    RelExpOp::Lt => (lhs < rhs) as i32,
+                    RelExpOp::Ge => (lhs >= rhs) as i32,
+                    RelExpOp::Le => (lhs <= rhs) as i32,
+                }
+            }
+        }
+    }
+
     pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
         match self {
             RelExp::AddExp(add_exp) => add_exp.build_ir(block_builder),
@@ -145,6 +205,20 @@ pub enum AddExp {
 }
 
 impl AddExp {
+    pub fn get_value<T: ValueQuery>(&self, vq: &T) -> i32 {
+        match self {
+            AddExp::MulExp(mul_exp) => mul_exp.get_value(vq),
+            AddExp::AddExpOpMulExp(add_exp, op, mul_exp) => {
+                let lhs = add_exp.get_value(vq);
+                let rhs = mul_exp.get_value(vq);
+                match op {
+                    AddOp::Plus => lhs + rhs,
+                    AddOp::Minus => lhs - rhs,
+                }
+            }
+        }
+    }
+
     pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
         match self {
             AddExp::MulExp(exp) => {
@@ -170,6 +244,21 @@ pub enum MulExp {
 }
 
 impl MulExp {
+    pub fn get_value<T: ValueQuery>(&self, vq: &T) -> i32 {
+        match self {
+            MulExp::UnaryExp(unary_exp) => unary_exp.get_value(vq),
+            MulExp::MulExpOpUnaryExp(mul_exp, op, unary_exp) => {
+                let lhs = mul_exp.get_value(vq);
+                let rhs = unary_exp.get_value(vq);
+                match op {
+                    MulOp::Mul => lhs * rhs,
+                    MulOp::Div => lhs / rhs,
+                    MulOp::Mod => lhs % rhs,
+                }
+            }
+        }
+    }
+
     pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
         match self {
             MulExp::UnaryExp(unary) => {
@@ -233,6 +322,26 @@ pub enum UnaryExp {
 }
 
 impl UnaryExp {
+    pub fn get_value<T: ValueQuery>(&self, vq: &T) -> i32 {
+        match self {
+            UnaryExp::PrimaryExp(pe) => pe.get_value(vq),
+            UnaryExp::UnaryOpAndExp(op, exp) => {
+                let rhs = exp.get_value(vq);
+                match op {
+                    UnaryOp::Plus => rhs,
+                    UnaryOp::Minus => -rhs,
+                    UnaryOp::Not => {
+                        if rhs == 0 {
+                            1
+                        } else {
+                            0
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
         match self {
             UnaryExp::PrimaryExp(pe) => {
@@ -267,10 +376,22 @@ pub enum PrimaryExp {
     // ( Expr )
     Exp(Box<Exp>),
     Number(i32),
-    LVal(LVal)
+    LVal(LVal),
 }
 
 impl PrimaryExp {
+    pub fn get_value<T: ValueQuery>(&self, vq: &T) -> i32 {
+        match self {
+            PrimaryExp::Exp(exp) => exp.get_value(vq),
+            PrimaryExp::Number(v) => *v,
+            PrimaryExp::LVal(name) => {
+                let name = name.ident.clone();
+                vq.get_value(&name)
+                    .expect("should has value when calc exp value")
+            }
+        }
+    }
+
     pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
         match self {
             PrimaryExp::Exp(exp) => exp.build_ir(block_builder),

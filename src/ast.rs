@@ -84,11 +84,10 @@ pub enum Decl {
 impl Decl {
     pub fn build_ir(&self, block_builder: &mut BlockBuilder) {
         match self {
-            Decl::ConstDecl(const_decl) => {},
+            Decl::ConstDecl(const_decl) => {}
         }
     }
 }
-
 
 #[derive(Debug)]
 pub struct Stmt {
@@ -107,4 +106,3 @@ impl Stmt {
         block_builder.extend([ret]);
     }
 }
-

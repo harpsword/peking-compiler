@@ -27,7 +27,6 @@ impl SysyCompiler {
 
             ast: Option::None,
             ir: Option::None,
-
         })
     }
 

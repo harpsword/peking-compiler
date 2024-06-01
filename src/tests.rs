@@ -5,7 +5,7 @@ mod test {
     use koopa::back::KoopaGenerator;
     use log::log_enabled;
 
-    use crate::{ir_enhance::generate_riscv, compiler_define::SysyCompiler};
+    use crate::{compiler_define::SysyCompiler, ir_enhance::generate_riscv};
 
     use koopa::ir::{builder::EntityInfoQuerier, builder_traits::*, *};
 

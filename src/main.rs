@@ -1,9 +1,9 @@
+use std::env::args;
 use std::env::Args;
 use std::fs::File;
 use std::io::{Result, Write};
 use std::path::PathBuf;
 use std::str::from_utf8;
-use std::{env::args};
 
 use koopa::back::KoopaGenerator;
 use lalrpop_util::lalrpop_mod;
@@ -11,8 +11,8 @@ use lalrpop_util::lalrpop_mod;
 use crate::compiler_define::SysyCompiler;
 
 mod ast;
-mod ir_enhance;
 mod compiler_define;
+mod ir_enhance;
 pub(crate) mod riscv;
 
 mod tests;

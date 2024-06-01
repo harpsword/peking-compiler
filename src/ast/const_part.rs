@@ -1,13 +1,10 @@
 use super::Exp;
 
-
-
 #[derive(Debug)]
 pub struct ConstDecl {
     pub b_type: BType,
     pub const_defs: Vec<ConstDef>,
 }
-
 
 #[derive(Debug, Clone)]
 pub enum BType {
