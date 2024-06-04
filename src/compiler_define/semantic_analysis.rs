@@ -13,40 +13,40 @@ use crate::ast::*;
 
 use super::symbol_table::ConstTable;
 
-pub struct ConstCalculation {
+struct ConstCalculation {
     values: Vec<i32>,
 
     const_table: ConstTable,
 }
 
 impl ConstCalculation {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             values: Vec::new(),
             const_table: ConstTable::new(),
         }
     }
 
-    pub fn append(&mut self, value: i32) {
+    fn append(&mut self, value: i32) {
         self.values.push(value);
     }
 
-    pub fn const_table(&mut self) -> &mut ConstTable {
+    fn const_table(&mut self) -> &mut ConstTable {
         &mut self.const_table
     }
 
-    pub fn get_index(&self, index: usize) -> i32 {
+    fn get_index(&self, index: usize) -> i32 {
         assert!(index < self.values.len());
         self.values[index]
     }
 
-    pub fn set_to_value(&mut self, value: i32) {
+    fn set_to_value(&mut self, value: i32) {
         self.values.clear();
         self.values.push(value);
     }
 }
 
-pub fn const_calculate(ast_node: &ast::CompUnit) {
+pub fn const_calculate(ast_node: &ast::CompUnit) -> ConstTable {
     let mut const_calc = ConstCalculation::new();
 
     let sink = &mut |s: &TraversalStep| {
@@ -175,4 +175,6 @@ pub fn const_calculate(ast_node: &ast::CompUnit) {
     ast_node.traversal(sink);
 
     println!("const table: {:#?}", const_calc.const_table);
+
+    const_calc.const_table
 }

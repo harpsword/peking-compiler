@@ -3,6 +3,7 @@ use koopa::ir::Program;
 use crate::{ast, sysy};
 use std::{fs::read_to_string, io::Result, path::PathBuf};
 
+pub mod ir_generate;
 pub mod semantic_analysis;
 pub mod symbol_table;
 
