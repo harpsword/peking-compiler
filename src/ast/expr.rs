@@ -1,9 +1,7 @@
-use crate::{ir_enhance::ir_builder::*, main};
+use crate::ir_enhance::ir_builder::*;
 use koopa::ir::{builder_traits::*, *};
 
-trait ValueQuery {
-    fn get_value(&self, name: &str) -> Option<i32>;
-}
+use super::{AstNode, TraversalStep};
 
 #[derive(Debug)]
 pub struct Exp {
@@ -11,12 +9,14 @@ pub struct Exp {
 }
 
 impl Exp {
-    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
-        self.l_or_exp.build_ir(block_builder)
+    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        sink(&TraversalStep::Enter(AstNode::Exp(self)));
+        self.l_or_exp.traversal(sink);
+        sink(&TraversalStep::Leave(AstNode::Exp(self)));
     }
 
-    pub fn get_value<T: ValueQuery>(&self, vq: &T) -> i32 {
-        self.l_or_exp.get_value(vq)
+    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
+        self.l_or_exp.build_ir(block_builder)
     }
 }
 
@@ -28,6 +28,18 @@ pub enum LOrExp {
 }
 
 impl LOrExp {
+    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        sink(&TraversalStep::Enter(AstNode::LOrExp(self)));
+        match self {
+            LOrExp::LAndExp(l_and_exp) => l_and_exp.traversal(sink),
+            LOrExp::LOrExpOpLAndExp(l_or_exp, l_and_exp) => {
+                l_or_exp.traversal(sink);
+                l_and_exp.traversal(sink);
+            }
+        }
+        sink(&TraversalStep::Leave(AstNode::LOrExp(self)));
+    }
+
     pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
         match self {
             LOrExp::LAndExp(l_and_exp) => l_and_exp.build_ir(block_builder),
@@ -42,17 +54,6 @@ impl LOrExp {
             }
         }
     }
-
-    pub fn get_value<T: ValueQuery>(&self, vq: &T) -> i32 {
-        match self {
-            LOrExp::LAndExp(l_and_exp) => l_and_exp.get_value(vq),
-            LOrExp::LOrExpOpLAndExp(l_or_exp, l_and_exp) => {
-                let lhs = l_or_exp.get_value(vq);
-                let rhs = l_and_exp.get_value(vq);
-                (lhs != 0 || rhs != 0) as i32
-            }
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -63,15 +64,16 @@ pub enum LAndExp {
 }
 
 impl LAndExp {
-    pub fn get_value<T: ValueQuery>(&self, vq: &T) -> i32 {
+    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        sink(&TraversalStep::Enter(AstNode::LAndExp(self)));
         match self {
-            LAndExp::EqExp(eq_exp) => eq_exp.get_value(vq),
+            LAndExp::EqExp(eq_exp) => eq_exp.traversal(sink),
             LAndExp::LAndExpOpEqExp(l_and_exp, eq_exp) => {
-                let lhs = l_and_exp.get_value(vq);
-                let rhs = eq_exp.get_value(vq);
-                (lhs != 0 && rhs != 0) as i32
+                l_and_exp.traversal(sink);
+                eq_exp.traversal(sink);
             }
         }
+        sink(&TraversalStep::Leave(AstNode::LAndExp(self)));
     }
 
     pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
@@ -97,18 +99,16 @@ pub enum EqExp {
 }
 
 impl EqExp {
-    pub fn get_value<T: ValueQuery>(&self, vq: &T) -> i32 {
+    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        sink(&TraversalStep::Enter(AstNode::EqExp(self)));
         match self {
-            EqExp::RelExp(rel_exp) => rel_exp.get_value(vq),
+            EqExp::RelExp(rel_exp) => rel_exp.traversal(sink),
             EqExp::EqExpOpRelExp(eq_exp, op, rel_exp) => {
-                let lhs = eq_exp.get_value(vq);
-                let rhs = rel_exp.get_value(vq);
-                match op {
-                    EqExpOp::Eq => (lhs == rhs) as i32,
-                    EqExpOp::Ne => (lhs != rhs) as i32,
-                }
+                eq_exp.traversal(sink);
+                rel_exp.traversal(sink);
             }
         }
+        sink(&TraversalStep::Leave(AstNode::EqExp(self)));
     }
 
     pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
@@ -148,20 +148,16 @@ pub enum RelExp {
 }
 
 impl RelExp {
-    pub fn get_value<T: ValueQuery>(&self, vq: &T) -> i32 {
+    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        sink(&TraversalStep::Enter(AstNode::RelExp(self)));
         match self {
-            RelExp::AddExp(add_exp) => add_exp.get_value(vq),
+            RelExp::AddExp(add_exp) => add_exp.traversal(sink),
             RelExp::RelExpOpAddExp(rel_exp, op, add_exp) => {
-                let lhs = rel_exp.get_value(vq);
-                let rhs = add_exp.get_value(vq);
-                match op {
-                    RelExpOp::Gt => (lhs > rhs) as i32,
-                    RelExpOp::Lt => (lhs < rhs) as i32,
-                    RelExpOp::Ge => (lhs >= rhs) as i32,
-                    RelExpOp::Le => (lhs <= rhs) as i32,
-                }
+                rel_exp.traversal(sink);
+                add_exp.traversal(sink);
             }
         }
+        sink(&TraversalStep::Leave(AstNode::RelExp(self)));
     }
 
     pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
@@ -205,18 +201,16 @@ pub enum AddExp {
 }
 
 impl AddExp {
-    pub fn get_value<T: ValueQuery>(&self, vq: &T) -> i32 {
+    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        sink(&TraversalStep::Enter(AstNode::AddExp(self)));
         match self {
-            AddExp::MulExp(mul_exp) => mul_exp.get_value(vq),
+            AddExp::MulExp(mul_exp) => mul_exp.traversal(sink),
             AddExp::AddExpOpMulExp(add_exp, op, mul_exp) => {
-                let lhs = add_exp.get_value(vq);
-                let rhs = mul_exp.get_value(vq);
-                match op {
-                    AddOp::Plus => lhs + rhs,
-                    AddOp::Minus => lhs - rhs,
-                }
+                add_exp.traversal(sink);
+                mul_exp.traversal(sink);
             }
         }
+        sink(&TraversalStep::Leave(AstNode::AddExp(self)));
     }
 
     pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
@@ -244,19 +238,16 @@ pub enum MulExp {
 }
 
 impl MulExp {
-    pub fn get_value<T: ValueQuery>(&self, vq: &T) -> i32 {
+    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        sink(&TraversalStep::Enter(AstNode::MulExp(self)));
         match self {
-            MulExp::UnaryExp(unary_exp) => unary_exp.get_value(vq),
+            MulExp::UnaryExp(unary_exp) => unary_exp.traversal(sink),
             MulExp::MulExpOpUnaryExp(mul_exp, op, unary_exp) => {
-                let lhs = mul_exp.get_value(vq);
-                let rhs = unary_exp.get_value(vq);
-                match op {
-                    MulOp::Mul => lhs * rhs,
-                    MulOp::Div => lhs / rhs,
-                    MulOp::Mod => lhs % rhs,
-                }
+                mul_exp.traversal(sink);
+                unary_exp.traversal(sink);
             }
         }
+        sink(&TraversalStep::Leave(AstNode::MulExp(self)));
     }
 
     pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
@@ -322,24 +313,15 @@ pub enum UnaryExp {
 }
 
 impl UnaryExp {
-    pub fn get_value<T: ValueQuery>(&self, vq: &T) -> i32 {
+    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        sink(&TraversalStep::Enter(AstNode::UnaryExp(self)));
         match self {
-            UnaryExp::PrimaryExp(pe) => pe.get_value(vq),
+            UnaryExp::PrimaryExp(pe) => pe.traversal(sink),
             UnaryExp::UnaryOpAndExp(op, exp) => {
-                let rhs = exp.get_value(vq);
-                match op {
-                    UnaryOp::Plus => rhs,
-                    UnaryOp::Minus => -rhs,
-                    UnaryOp::Not => {
-                        if rhs == 0 {
-                            1
-                        } else {
-                            0
-                        }
-                    }
-                }
+                exp.traversal(sink);
             }
         }
+        sink(&TraversalStep::Leave(AstNode::UnaryExp(self)));
     }
 
     pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
@@ -380,16 +362,17 @@ pub enum PrimaryExp {
 }
 
 impl PrimaryExp {
-    pub fn get_value<T: ValueQuery>(&self, vq: &T) -> i32 {
+    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        sink(&TraversalStep::Enter(AstNode::PrimaryExp(self)));
         match self {
-            PrimaryExp::Exp(exp) => exp.get_value(vq),
-            PrimaryExp::Number(v) => *v,
-            PrimaryExp::LVal(name) => {
-                let name = name.ident.clone();
-                vq.get_value(&name)
-                    .expect("should has value when calc exp value")
+            PrimaryExp::Exp(exp) => exp.traversal(sink),
+            PrimaryExp::Number(n) => {
+                sink(&TraversalStep::Enter(AstNode::Number(n)));
+                sink(&TraversalStep::Leave(AstNode::Number(n)));
             }
+            PrimaryExp::LVal(l) => l.traversal(sink),
         }
+        sink(&TraversalStep::Leave(AstNode::PrimaryExp(self)));
     }
 
     pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
@@ -404,4 +387,11 @@ impl PrimaryExp {
 #[derive(Debug)]
 pub struct LVal {
     pub ident: String,
+}
+
+impl LVal {
+    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        sink(&TraversalStep::Enter(AstNode::LVal(self)));
+        sink(&TraversalStep::Leave(AstNode::LVal(self)));
+    }
 }

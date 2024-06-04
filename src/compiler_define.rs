@@ -3,7 +3,8 @@ use koopa::ir::Program;
 use crate::{ast, sysy};
 use std::{fs::read_to_string, io::Result, path::PathBuf};
 
-mod symbol_table;
+pub mod semantic_analysis;
+pub mod symbol_table;
 
 pub struct SysyCompiler {
     file: String,

@@ -1,5 +1,6 @@
 use crate::ast::*;
-use crate::ast::const_part::*;
+use crate::ast::const_decl::*;
+use crate::ast::expr::*;
 
 grammar;
 

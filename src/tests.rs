@@ -3,9 +3,13 @@ mod test {
 
     use env_logger::Env;
     use koopa::back::KoopaGenerator;
-    use log::log_enabled;
+    use log::{info, log_enabled};
 
-    use crate::{compiler_define::SysyCompiler, ir_enhance::generate_riscv};
+    use crate::{
+        ast::{Block, BlockItem, CompUnit, Decl, FuncDef},
+        compiler_define::{semantic_analysis, symbol_table::ConstTable, SysyCompiler},
+        ir_enhance::generate_riscv,
+    };
 
     use koopa::ir::{builder::EntityInfoQuerier, builder_traits::*, *};
 
@@ -22,6 +26,8 @@ mod test {
 
         let ast = parser.ast.as_ref().unwrap();
         println!("ast: {:#?}", ast);
+
+        semantic_analysis::const_calculate(ast);
 
         // {
         //     let ir = parser.get_ir().unwrap();

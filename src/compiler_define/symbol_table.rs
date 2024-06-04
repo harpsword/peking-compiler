@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+#[derive(Debug)]
 pub(crate) struct ConstTable {
     const_table: HashMap<String, i32>,
 }

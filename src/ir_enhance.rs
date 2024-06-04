@@ -1,8 +1,7 @@
-use std::{collections::HashMap, fmt::format, hash::Hash, result};
+use std::collections::HashMap;
 
 use koopa::ir::{
-    entities::{BasicBlockData, ValueData},
-    values::{self, Binary},
+    values::{self},
     Function, FunctionData, Program, Value, ValueKind,
 };
 use once_cell::sync::Lazy;
