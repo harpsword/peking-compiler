@@ -68,6 +68,7 @@ impl AstNode<'_> {
     }
 }
 
+#[derive(PartialEq)]
 pub enum AstNodeKind {
     CompUnit,
     FuncDef,

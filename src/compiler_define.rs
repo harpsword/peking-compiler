@@ -47,8 +47,6 @@ impl SysyCompiler {
     }
 
     pub fn get_ir(&self) -> Option<Program> {
-        // TODO
-        // self.ast.as_ref().map(|ast| ast.build_ir())
         self.ast
             .as_ref()
             .map(|ast| ir_generate(ast, &self.const_symbols))

@@ -62,8 +62,7 @@ fn main() -> Result<()> {
 
     compiler.generate_ast();
 
-    // let ast = parser.ast.as_ref().unwrap();
-    // println!("{:#?}", ast);
+    compiler.semantic_analysis();
 
     let ir = compiler.get_ir().unwrap();
 

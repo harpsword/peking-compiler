@@ -21,6 +21,7 @@ struct IRGenerator {
     function: Option<Function>,
     block: Option<BasicBlock>,
     return_values: Vec<Value>,
+    ast_node_kind_stack: Vec<AstNodeKind>,
 }
 
 impl IRGenerator {
@@ -30,6 +31,7 @@ impl IRGenerator {
             function: Option::None,
             block: Option::None,
             return_values: Vec::new(),
+            ast_node_kind_stack: Vec::new(),
         }
     }
 
@@ -73,6 +75,22 @@ impl IRGenerator {
 
     fn append_return_value(&mut self, value: Value) {
         self.return_values.push(value);
+    }
+
+    /// ast kind
+    fn append_ast_kind(&mut self, kind: AstNodeKind) {
+        self.ast_node_kind_stack.push(kind)
+    }
+
+    /// ast kind
+    fn pop_ast_kind(&mut self) -> AstNodeKind {
+        self.ast_node_kind_stack
+            .pop()
+            .expect("should have ast node kind")
+    }
+
+    fn ast_kind_stack_has(&self, kind: AstNodeKind) -> bool {
+        self.ast_node_kind_stack.contains(&kind)
     }
 }
 
@@ -171,6 +189,7 @@ pub fn ir_generate(ast_node: &ast::CompUnit, value_table: &ConstTable) -> koopa:
 
     let sink = &mut |s: &ast::TraversalStep| {
         if let ast::TraversalStep::Enter(enter) = s {
+            generator.append_ast_kind(enter.get_kind());
             match enter {
                 AstNode::FuncDef(func_def) => {
                     let func_data = FunctionData::with_param_names(
@@ -189,6 +208,7 @@ pub fn ir_generate(ast_node: &ast::CompUnit, value_table: &ConstTable) -> koopa:
         }
 
         if let TraversalStep::Leave(leave) = s {
+            generator.pop_ast_kind();
             match leave {
                 AstNode::Stmt(_) => {
                     let return_value = generator.pop_return_value_option();
@@ -196,80 +216,11 @@ pub fn ir_generate(ast_node: &ast::CompUnit, value_table: &ConstTable) -> koopa:
                     generator.extend([ret]);
                 }
 
-                // for experission
-                AstNode::LOrExp(exp) => match exp {
-                    LOrExp::LOrExpOpLAndExp(_, _) => {
-                        common_expression(&mut generator, BinaryOp::Or);
-                    }
-                    _ => {}
-                },
-
-                AstNode::LAndExp(exp) => match exp {
-                    LAndExp::LAndExpOpEqExp(_, _) => {
-                        common_expression(&mut generator, BinaryOp::And);
-                    }
-                    _ => {}
-                },
-                AstNode::EqExp(exp) => match exp {
-                    EqExp::EqExpOpRelExp(_, op, _) => {
-                        common_expression(&mut generator, op.clone());
-                    }
-                    _ => {}
-                },
-                AstNode::RelExp(exp) => match exp {
-                    RelExp::RelExpOpAddExp(_, op, _) => {
-                        common_expression(&mut generator, op.clone());
-                    }
-                    _ => {}
-                },
-                AstNode::AddExp(exp) => match exp {
-                    AddExp::AddExpOpMulExp(_, op, _) => {
-                        common_expression(&mut generator, op.clone());
-                    }
-                    _ => {}
-                },
-                AstNode::MulExp(exp) => match exp {
-                    MulExp::MulExpOpUnaryExp(_, op, _) => {
-                        common_expression(&mut generator, op.clone());
-                    }
-                    _ => {}
-                },
-
-                AstNode::UnaryExp(exp) => match exp {
-                    UnaryExp::UnaryOpAndExp(op, _) => match op {
-                        expr::UnaryOp::Plus => {}
-                        expr::UnaryOp::Minus => {
-                            let op_exp = generator.pop_return_value();
-                            let lhs = generator.new_value().integer(0);
-                            let minus = generator.new_value().binary(BinaryOp::Sub, lhs, op_exp);
-                            generator.extend([minus]);
-
-                            generator.append_return_value(minus);
-                        }
-                        expr::UnaryOp::Not => {
-                            let op_exp = generator.pop_return_value();
-                            let rhs = generator.new_value().integer(0);
-                            let not = generator.new_value().binary(BinaryOp::Eq, op_exp, rhs);
-                            generator.extend([not]);
-
-                            generator.append_return_value(not);
-                        }
-                    },
-                    _ => {}
-                },
-                AstNode::Number(v) => {
-                    let value = generator.new_value().integer(**v);
-                    generator.append_return_value(value);
-                }
-                AstNode::LVal(name) => {
-                    let value = value_table
-                        .get_const(&name.ident)
-                        .expect("should define it before");
-                    let value = generator.new_value().integer(value);
-                    generator.append_return_value(value);
-                }
-
                 _ => {}
+            }
+
+            if !generator.ast_kind_stack_has(AstNodeKind::ConstDecl) {
+                exp_ir_generate(&mut generator, leave, value_table);
             }
         }
     };
