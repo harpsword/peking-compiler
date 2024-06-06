@@ -1,4 +1,6 @@
+use ir_generate::ir_generate;
 use koopa::ir::Program;
+use semantic_analysis::const_calculate;
 
 use crate::{ast, sysy};
 use std::{fs::read_to_string, io::Result, path::PathBuf};
@@ -34,6 +36,9 @@ impl SysyCompiler {
 
     pub fn semantic_analysis(&mut self) {
         // const value computation, should return a const value table
+        let ast = self.ast.as_ref().expect("need to build ast first");
+        let const_table = const_calculate(ast);
+        self.const_symbols = const_table;
     }
 
     pub fn generate_ast(&mut self) {
@@ -42,6 +47,10 @@ impl SysyCompiler {
     }
 
     pub fn get_ir(&self) -> Option<Program> {
-        self.ast.as_ref().map(|ast| ast.build_ir())
+        // TODO
+        // self.ast.as_ref().map(|ast| ast.build_ir())
+        self.ast
+            .as_ref()
+            .map(|ast| ir_generate(ast, &self.const_symbols))
     }
 }

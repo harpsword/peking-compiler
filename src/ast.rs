@@ -36,6 +36,85 @@ pub enum AstNode<'a> {
     Number(&'a i32),
 }
 
+impl AstNode<'_> {
+    pub fn get_kind(&self) -> AstNodeKind {
+        match self {
+            AstNode::CompUnit(_) => AstNodeKind::CompUnit,
+            AstNode::FuncDef(_) => AstNodeKind::FuncDef,
+
+            AstNode::Block(_) => AstNodeKind::Block,
+            AstNode::BlockItem(_) => AstNodeKind::BlockItem,
+            AstNode::Stmt(_) => AstNodeKind::Stmt,
+            AstNode::Decl(_) => AstNodeKind::Decl,
+
+            AstNode::ConstDecl(_) => AstNodeKind::ConstDecl,
+            AstNode::BType(_) => AstNodeKind::BType,
+            AstNode::ConstDef(_) => AstNodeKind::ConstDef,
+            AstNode::ConstInitVal(_) => AstNodeKind::ConstInitVal,
+            AstNode::ConstExp(_) => AstNodeKind::ConstExp,
+
+            AstNode::Exp(_) => AstNodeKind::Exp,
+            AstNode::LOrExp(_) => AstNodeKind::LOrExp,
+            AstNode::LAndExp(_) => AstNodeKind::LAndExp,
+            AstNode::EqExp(_) => AstNodeKind::EqExp,
+            AstNode::RelExp(_) => AstNodeKind::RelExp,
+            AstNode::AddExp(_) => AstNodeKind::AddExp,
+            AstNode::MulExp(_) => AstNodeKind::MulExp,
+            AstNode::UnaryExp(_) => AstNodeKind::UnaryExp,
+            AstNode::PrimaryExp(_) => AstNodeKind::PrimaryExp,
+            AstNode::LVal(_) => AstNodeKind::LVal,
+            AstNode::Number(_) => AstNodeKind::Number,
+        }
+    }
+}
+
+pub enum AstNodeKind {
+    CompUnit,
+    FuncDef,
+
+    Block,
+    BlockItem,
+    Stmt,
+    Decl,
+
+    ConstDecl,
+    BType,
+    ConstDef,
+    ConstInitVal,
+    ConstExp,
+
+    Exp,
+    LOrExp,
+    LAndExp,
+    EqExp,
+    RelExp,
+    AddExp,
+    MulExp,
+    UnaryExp,
+    PrimaryExp,
+    LVal,
+    Number,
+}
+
+impl AstNodeKind {
+    pub fn is_expression(&self) -> bool {
+        match self {
+            Self::Exp
+            | Self::LOrExp
+            | Self::LAndExp
+            | Self::EqExp
+            | Self::RelExp
+            | Self::AddExp
+            | Self::MulExp
+            | Self::UnaryExp
+            | Self::PrimaryExp
+            | Self::LVal
+            | Self::Number => true,
+            _ => false,
+        }
+    }
+}
+
 pub enum TraversalStep<'a> {
     Enter(AstNode<'a>),
     Leave(AstNode<'a>),
@@ -154,6 +233,7 @@ impl Decl {
     }
 }
 
+/// only support return exp;
 #[derive(Debug)]
 pub struct Stmt {
     pub exp: Box<Exp>,
