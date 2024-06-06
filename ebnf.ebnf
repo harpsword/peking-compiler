@@ -3,26 +3,35 @@ CompUnit  ::= FuncDef;
 FuncDef   ::= FuncType IDENT "(" ")" Block;
 FuncType  ::= "int";
 
-Block     ::= "{" Stmt "}";
+# Const part
+Decl ::= ConstDecl;
+
+ConstDecl ::= "const" BType ConstDef { "," ConstDef } ";";
+BType     ::= "int";
+ConstDef  ::= IDENT "=" ConstInitVal;
+ConstInitVal ::= ConstExp;
+ConstExp ::= Exp;
+
+Block     ::= "{" {BlockItem} "}";
+BlockItem ::= Decl | Stmt;
 Stmt      ::= "return" Exp ";";
+
+
+# -------- Expr part -----------
+
 Exp       ::= LOrExp;
 
 LOrExp ::= LAndExp | LOrExp "||" LAndExp;
-
 LAndExp ::= EqExp | LAndExp "&&" EqExp;
 
 EqExp ::= RelExp | EqExp ("==" | "!=") RelExp;
-
 RelExp ::= AddExp | RelExp ("<" | ">" | "<=" | ">=") AddExp;
-
 MulExp ::= UnaryExp | MulExp ("*" | "/" | "%") MulExp;
-
 AddExp ::= MulExp | AddExp ("+" | "-") MulExp;
 
 UnaryExp  ::= PrimaryExp | UnaryOp UnaryExp;
-
-PrimaryExp ::= "(" Exp ")" | Number;
-
 UnaryOp ::= "+" | "-" | "!";
 
+PrimaryExp ::= "(" Exp ")" | Number | LVal;
+LVal ::= IDENT;
 Number    ::= INT_CONST;

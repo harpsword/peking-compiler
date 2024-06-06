@@ -1,9 +1,6 @@
-use koopa::{
-    front::ast::Block,
-    ir::{
-        builder::{BasicBlockBuilder, LocalBuilder},
-        BasicBlock, FunctionData, Program, Value,
-    },
+use koopa::ir::{
+    builder::{BasicBlockBuilder, LocalBuilder},
+    BasicBlock, FunctionData, Program, Value,
 };
 
 pub(crate) struct ProgramBuilder {

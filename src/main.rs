@@ -1,18 +1,18 @@
+use std::env::args;
 use std::env::Args;
 use std::fs::File;
 use std::io::{Result, Write};
 use std::path::PathBuf;
 use std::str::from_utf8;
-use std::{env::args, fs::read_to_string};
 
 use koopa::back::KoopaGenerator;
 use lalrpop_util::lalrpop_mod;
 
-use crate::parser::SysyParser;
+use crate::compiler_define::SysyCompiler;
 
 mod ast;
+mod compiler_define;
 mod ir_enhance;
-mod parser;
 pub(crate) mod riscv;
 
 mod tests;
@@ -58,14 +58,13 @@ fn main() -> Result<()> {
         panic!("need input source code path");
     }
 
-    let mut parser = SysyParser::new(args.input_file.unwrap())?;
+    let mut compiler = SysyCompiler::new(args.input_file.unwrap())?;
 
-    parser.generate_ast();
+    compiler.generate_ast();
 
-    // let ast = parser.ast.as_ref().unwrap();
-    // println!("{:#?}", ast);
+    compiler.semantic_analysis();
 
-    let ir = parser.get_ir().unwrap();
+    let ir = compiler.get_ir().unwrap();
 
     let output = if args.output_riscv {
         ir_enhance::generate_riscv(ir)

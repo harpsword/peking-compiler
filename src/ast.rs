@@ -1,8 +1,125 @@
-use std::ops::Add;
-
 use crate::ir_enhance::ir_builder::*;
 use koopa::ir::{builder_traits::*, *};
 use log::info;
+
+use self::const_decl::*;
+use self::expr::*;
+
+pub mod const_decl;
+pub mod expr;
+
+pub enum AstNode<'a> {
+    CompUnit(&'a CompUnit),
+    FuncDef(&'a FuncDef),
+
+    Block(&'a Block),
+    BlockItem(&'a BlockItem),
+    Stmt(&'a Stmt),
+    Decl(&'a Decl),
+
+    ConstDecl(&'a ConstDecl),
+    BType(&'a BType),
+    ConstDef(&'a ConstDef),
+    ConstInitVal(&'a ConstInitVal),
+    ConstExp(&'a ConstExp),
+
+    Exp(&'a Exp),
+    LOrExp(&'a LOrExp),
+    LAndExp(&'a LAndExp),
+    EqExp(&'a EqExp),
+    RelExp(&'a RelExp),
+    AddExp(&'a AddExp),
+    MulExp(&'a MulExp),
+    UnaryExp(&'a UnaryExp),
+    PrimaryExp(&'a PrimaryExp),
+    LVal(&'a LVal),
+    Number(&'a i32),
+}
+
+impl AstNode<'_> {
+    pub fn get_kind(&self) -> AstNodeKind {
+        match self {
+            AstNode::CompUnit(_) => AstNodeKind::CompUnit,
+            AstNode::FuncDef(_) => AstNodeKind::FuncDef,
+
+            AstNode::Block(_) => AstNodeKind::Block,
+            AstNode::BlockItem(_) => AstNodeKind::BlockItem,
+            AstNode::Stmt(_) => AstNodeKind::Stmt,
+            AstNode::Decl(_) => AstNodeKind::Decl,
+
+            AstNode::ConstDecl(_) => AstNodeKind::ConstDecl,
+            AstNode::BType(_) => AstNodeKind::BType,
+            AstNode::ConstDef(_) => AstNodeKind::ConstDef,
+            AstNode::ConstInitVal(_) => AstNodeKind::ConstInitVal,
+            AstNode::ConstExp(_) => AstNodeKind::ConstExp,
+
+            AstNode::Exp(_) => AstNodeKind::Exp,
+            AstNode::LOrExp(_) => AstNodeKind::LOrExp,
+            AstNode::LAndExp(_) => AstNodeKind::LAndExp,
+            AstNode::EqExp(_) => AstNodeKind::EqExp,
+            AstNode::RelExp(_) => AstNodeKind::RelExp,
+            AstNode::AddExp(_) => AstNodeKind::AddExp,
+            AstNode::MulExp(_) => AstNodeKind::MulExp,
+            AstNode::UnaryExp(_) => AstNodeKind::UnaryExp,
+            AstNode::PrimaryExp(_) => AstNodeKind::PrimaryExp,
+            AstNode::LVal(_) => AstNodeKind::LVal,
+            AstNode::Number(_) => AstNodeKind::Number,
+        }
+    }
+}
+
+#[derive(PartialEq)]
+pub enum AstNodeKind {
+    CompUnit,
+    FuncDef,
+
+    Block,
+    BlockItem,
+    Stmt,
+    Decl,
+
+    ConstDecl,
+    BType,
+    ConstDef,
+    ConstInitVal,
+    ConstExp,
+
+    Exp,
+    LOrExp,
+    LAndExp,
+    EqExp,
+    RelExp,
+    AddExp,
+    MulExp,
+    UnaryExp,
+    PrimaryExp,
+    LVal,
+    Number,
+}
+
+impl AstNodeKind {
+    pub fn is_expression(&self) -> bool {
+        match self {
+            Self::Exp
+            | Self::LOrExp
+            | Self::LAndExp
+            | Self::EqExp
+            | Self::RelExp
+            | Self::AddExp
+            | Self::MulExp
+            | Self::UnaryExp
+            | Self::PrimaryExp
+            | Self::LVal
+            | Self::Number => true,
+            _ => false,
+        }
+    }
+}
+
+pub enum TraversalStep<'a> {
+    Enter(AstNode<'a>),
+    Leave(AstNode<'a>),
+}
 
 #[derive(Debug)]
 pub struct CompUnit {
@@ -16,6 +133,12 @@ impl CompUnit {
         self.func_def.build_ir(&mut program_builder);
 
         return program_builder.build();
+    }
+
+    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        sink(&TraversalStep::Enter(AstNode::CompUnit(self)));
+        self.func_def.traversal(sink);
+        sink(&TraversalStep::Leave(AstNode::CompUnit(self)));
     }
 }
 
@@ -35,6 +158,12 @@ impl FuncDef {
 
         self.block.build_ir(&mut func_builder);
     }
+
+    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        sink(&TraversalStep::Enter(AstNode::FuncDef(self)));
+        self.block.traversal(sink);
+        sink(&TraversalStep::Leave(AstNode::FuncDef(self)));
+    }
 }
 
 #[derive(Debug)]
@@ -44,24 +173,68 @@ pub enum FuncType {
 
 #[derive(Debug)]
 pub struct Block {
-    pub stmt: Stmt,
+    pub block_items: Vec<BlockItem>,
 }
 
 impl Block {
     pub fn build_ir(&self, func_builder: &mut FunctionBuilder) {
         let mut block_builder = func_builder.new_block(Some("@entry".to_owned()));
 
-        self.stmt.build_ir(&mut block_builder);
+        for block_item in self.block_items.iter() {
+            block_item.build_ir(&mut block_builder);
+        }
+    }
+
+    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        sink(&TraversalStep::Enter(AstNode::Block(self)));
+        for block_item in self.block_items.iter() {
+            block_item.traversal(sink);
+        }
+        sink(&TraversalStep::Leave(AstNode::Block(self)));
     }
 }
 
 #[derive(Debug)]
-pub enum UnaryOp {
-    Plus,
-    Minus,
-    Not,
+pub enum BlockItem {
+    Stmt(Stmt),
+    Decl(Decl),
 }
 
+impl BlockItem {
+    pub fn build_ir(&self, block_builder: &mut BlockBuilder) {
+        match self {
+            BlockItem::Stmt(stmt) => stmt.build_ir(block_builder),
+            BlockItem::Decl(decl) => decl.build_ir(block_builder),
+        }
+    }
+
+    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        match self {
+            BlockItem::Stmt(stmt) => stmt.traversal(sink),
+            BlockItem::Decl(decl) => decl.traversal(sink),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum Decl {
+    ConstDecl(ConstDecl),
+}
+
+impl Decl {
+    pub fn build_ir(&self, block_builder: &mut BlockBuilder) {
+        match self {
+            Decl::ConstDecl(const_decl) => {}
+        }
+    }
+    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        match self {
+            Decl::ConstDecl(const_decl) => const_decl.traversal(sink),
+        }
+    }
+}
+
+/// only support return exp;
 #[derive(Debug)]
 pub struct Stmt {
     pub exp: Box<Exp>,
@@ -78,274 +251,10 @@ impl Stmt {
         let ret = block_builder.new_value().ret(Some(return_value));
         block_builder.extend([ret]);
     }
-}
 
-#[derive(Debug)]
-pub struct Exp {
-    pub l_or_exp: Box<LOrExp>,
-}
-
-impl Exp {
-    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
-        self.l_or_exp.build_ir(block_builder)
-    }
-}
-
-#[derive(Debug)]
-pub enum LOrExp {
-    LAndExp(Box<LAndExp>),
-    // op always be "||"
-    LOrExpOpLAndExp(Box<LOrExp>, Box<LAndExp>),
-}
-
-impl LOrExp {
-    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
-        match self {
-            LOrExp::LAndExp(l_and_exp) => l_and_exp.build_ir(block_builder),
-            LOrExp::LOrExpOpLAndExp(l_or_exp, l_and_exp) => {
-                let l_or_exp = l_or_exp.build_ir(block_builder);
-                let l_and_exp = l_and_exp.build_ir(block_builder);
-                let exp = block_builder
-                    .new_value()
-                    .binary(BinaryOp::Or, l_or_exp, l_and_exp);
-                block_builder.extend([exp]);
-                return exp;
-            }
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum LAndExp {
-    EqExp(Box<EqExp>),
-    // op always be "&&"
-    LAndExpOpEqExp(Box<LAndExp>, Box<EqExp>),
-}
-
-impl LAndExp {
-    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
-        match self {
-            LAndExp::EqExp(eq_exp) => eq_exp.build_ir(block_builder),
-            LAndExp::LAndExpOpEqExp(l_and_exp, eq_exp) => {
-                let l_and_exp = l_and_exp.build_ir(block_builder);
-                let eq_exp = eq_exp.build_ir(block_builder);
-                let exp = block_builder
-                    .new_value()
-                    .binary(BinaryOp::And, l_and_exp, eq_exp);
-                block_builder.extend([exp]);
-                return exp;
-            }
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum EqExp {
-    RelExp(Box<RelExp>),
-    EqExpOpRelExp(Box<EqExp>, EqExpOp, Box<RelExp>),
-}
-
-impl EqExp {
-    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
-        match self {
-            EqExp::RelExp(rel_exp) => rel_exp.build_ir(block_builder),
-            EqExp::EqExpOpRelExp(eq_exp, op, rel_exp) => {
-                let eq_exp = eq_exp.build_ir(block_builder);
-                let rel_exp = rel_exp.build_ir(block_builder);
-                let op = op.clone().into();
-                let exp = block_builder.new_value().binary(op, eq_exp, rel_exp);
-                block_builder.extend([exp]);
-                return exp;
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum EqExpOp {
-    Eq, // ==
-    Ne, // !=
-}
-
-impl Into<BinaryOp> for EqExpOp {
-    fn into(self) -> BinaryOp {
-        match self {
-            EqExpOp::Eq => BinaryOp::Eq,
-            EqExpOp::Ne => BinaryOp::NotEq,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum RelExp {
-    AddExp(Box<AddExp>),
-    RelExpOpAddExp(Box<RelExp>, RelExpOp, Box<AddExp>),
-}
-
-impl RelExp {
-    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
-        match self {
-            RelExp::AddExp(add_exp) => add_exp.build_ir(block_builder),
-            RelExp::RelExpOpAddExp(rel_exp, op, add_exp) => {
-                let rel_exp = rel_exp.build_ir(block_builder);
-                let add_exp = add_exp.build_ir(block_builder);
-                let op = op.clone().into();
-                let exp = block_builder.new_value().binary(op, rel_exp, add_exp);
-                block_builder.extend([exp]);
-                return exp;
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum RelExpOp {
-    Gt, // >
-    Lt, // <
-    Ge, // >=
-    Le, // <=
-}
-
-impl Into<BinaryOp> for RelExpOp {
-    fn into(self) -> BinaryOp {
-        match self {
-            RelExpOp::Gt => BinaryOp::Gt,
-            RelExpOp::Lt => BinaryOp::Lt,
-            RelExpOp::Ge => BinaryOp::Ge,
-            RelExpOp::Le => BinaryOp::Le,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum AddExp {
-    MulExp(Box<MulExp>),
-    AddExpOpMulExp(Box<AddExp>, AddOp, Box<MulExp>),
-}
-
-impl AddExp {
-    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
-        match self {
-            AddExp::MulExp(exp) => {
-                return exp.build_ir(block_builder);
-            }
-            AddExp::AddExpOpMulExp(lhs, op, rhs) => {
-                let lhs = lhs.build_ir(block_builder);
-                let rhs = rhs.build_ir(block_builder);
-                let op = op.clone().into();
-                let exp = block_builder.new_value().binary(op, lhs, rhs);
-                block_builder.extend([exp]);
-                return exp;
-            }
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum MulExp {
-    UnaryExp(Box<UnaryExp>),
-
-    MulExpOpUnaryExp(Box<MulExp>, MulOp, Box<UnaryExp>),
-}
-
-impl MulExp {
-    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
-        match self {
-            MulExp::UnaryExp(unary) => {
-                return unary.build_ir(block_builder);
-            }
-            MulExp::MulExpOpUnaryExp(lhs, op, rhs) => {
-                let lhs = lhs.build_ir(block_builder);
-                let rhs = rhs.build_ir(block_builder);
-                let op = op.clone().into();
-                let exp = block_builder.new_value().binary(op, lhs, rhs);
-                block_builder.extend([exp]);
-                return exp;
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum MulOp {
-    Mul, // *
-    Div, // /
-    Mod, // %
-}
-
-impl Into<BinaryOp> for MulOp {
-    fn into(self) -> BinaryOp {
-        match self {
-            MulOp::Mul => BinaryOp::Mul,
-            MulOp::Div => BinaryOp::Div,
-            MulOp::Mod => BinaryOp::Mod,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum AddOp {
-    Plus,  // +
-    Minus, // -
-}
-
-impl Into<BinaryOp> for AddOp {
-    fn into(self) -> BinaryOp {
-        match self {
-            AddOp::Plus => BinaryOp::Add,
-            AddOp::Minus => BinaryOp::Sub,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum UnaryExp {
-    PrimaryExp(Box<PrimaryExp>),
-    UnaryOpAndExp(UnaryOp, Box<UnaryExp>),
-}
-
-impl UnaryExp {
-    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
-        match self {
-            UnaryExp::PrimaryExp(pe) => {
-                return pe.build_ir(block_builder);
-            }
-            UnaryExp::UnaryOpAndExp(op, op_exp) => {
-                let op_exp = op_exp.build_ir(block_builder);
-                match op {
-                    UnaryOp::Plus => {
-                        return op_exp;
-                    }
-                    UnaryOp::Minus => {
-                        let lhs = block_builder.new_value().integer(0);
-                        let minus = block_builder.new_value().binary(BinaryOp::Sub, lhs, op_exp);
-                        block_builder.extend([minus]);
-                        return minus;
-                    }
-                    UnaryOp::Not => {
-                        let rhs = block_builder.new_value().integer(0);
-                        let not = block_builder.new_value().binary(BinaryOp::Eq, op_exp, rhs);
-                        block_builder.extend([not]);
-                        return not;
-                    }
-                }
-            }
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum PrimaryExp {
-    // ( Expr )
-    Exp(Box<Exp>),
-    Number(i32),
-}
-
-impl PrimaryExp {
-    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
-        match self {
-            PrimaryExp::Exp(exp) => exp.build_ir(block_builder),
-            PrimaryExp::Number(v) => block_builder.new_value().integer(*v),
-        }
+    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        sink(&TraversalStep::Enter(AstNode::Stmt(self)));
+        self.exp.traversal(sink);
+        sink(&TraversalStep::Leave(AstNode::Stmt(self)));
     }
 }
