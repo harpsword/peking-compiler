@@ -5,6 +5,7 @@ use expr::LOrExp;
 use expr::MulExp;
 use expr::RelExp;
 use expr::UnaryExp;
+use log::info;
 
 use crate::ast;
 use crate::ast::AstNode;
@@ -174,7 +175,7 @@ pub fn const_calculate(ast_node: &ast::CompUnit) -> ConstTable {
 
     ast_node.traversal(sink);
 
-    println!("const table: {:#?}", const_calc.const_table);
+    info!("const table: {:#?}", const_calc.const_table);
 
     const_calc.const_table
 }

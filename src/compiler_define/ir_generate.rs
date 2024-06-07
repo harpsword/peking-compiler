@@ -1,18 +1,10 @@
-use std::{cell::RefCell, fs::OpenOptions, rc::Rc};
-
 use expr::{AddExp, EqExp, LAndExp, LOrExp, MulExp, RelExp, UnaryExp};
-use koopa::{
-    front::ast::Ast,
-    ir::{
-        builder::{BasicBlockBuilder, LocalBuilder, LocalInstBuilder, ValueBuilder},
-        values, BasicBlock, BinaryOp, Function, FunctionData, Program, Type, Value,
-    },
+use koopa::ir::{
+    builder::{BasicBlockBuilder, LocalBuilder, LocalInstBuilder, ValueBuilder},
+    BasicBlock, BinaryOp, Function, FunctionData, Program, Type, Value,
 };
 
-use crate::{
-    ast::{self, *},
-    ir_enhance::ir_builder::{BlockBuilder, FunctionBuilder, ProgramBuilder},
-};
+use crate::ast::{self, *};
 
 use super::symbol_table::ConstTable;
 
@@ -219,6 +211,7 @@ pub fn ir_generate(ast_node: &ast::CompUnit, value_table: &ConstTable) -> koopa:
                 _ => {}
             }
 
+            // expression in const decl shouldn't generate ir
             if !generator.ast_kind_stack_has(AstNodeKind::ConstDecl) {
                 exp_ir_generate(&mut generator, leave, value_table);
             }

@@ -11,7 +11,7 @@ use crate::riscv::{Instruction, RiskVCode};
 pub(crate) mod ir_builder;
 
 pub(crate) fn generate_riscv(program: Program) -> String {
-    let mut generator = RiscvGenerator::new();
+    let generator = RiscvGenerator::new();
 
     return generator.generate_riscv(program);
 }

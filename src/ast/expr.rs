@@ -14,10 +14,6 @@ impl Exp {
         self.l_or_exp.traversal(sink);
         sink(&TraversalStep::Leave(AstNode::Exp(self)));
     }
-
-    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
-        self.l_or_exp.build_ir(block_builder)
-    }
 }
 
 #[derive(Debug)]
@@ -38,21 +34,6 @@ impl LOrExp {
             }
         }
         sink(&TraversalStep::Leave(AstNode::LOrExp(self)));
-    }
-
-    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
-        match self {
-            LOrExp::LAndExp(l_and_exp) => l_and_exp.build_ir(block_builder),
-            LOrExp::LOrExpOpLAndExp(l_or_exp, l_and_exp) => {
-                let l_or_exp = l_or_exp.build_ir(block_builder);
-                let l_and_exp = l_and_exp.build_ir(block_builder);
-                let exp = block_builder
-                    .new_value()
-                    .binary(BinaryOp::Or, l_or_exp, l_and_exp);
-                block_builder.extend([exp]);
-                return exp;
-            }
-        }
     }
 }
 
@@ -75,21 +56,6 @@ impl LAndExp {
         }
         sink(&TraversalStep::Leave(AstNode::LAndExp(self)));
     }
-
-    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
-        match self {
-            LAndExp::EqExp(eq_exp) => eq_exp.build_ir(block_builder),
-            LAndExp::LAndExpOpEqExp(l_and_exp, eq_exp) => {
-                let l_and_exp = l_and_exp.build_ir(block_builder);
-                let eq_exp = eq_exp.build_ir(block_builder);
-                let exp = block_builder
-                    .new_value()
-                    .binary(BinaryOp::And, l_and_exp, eq_exp);
-                block_builder.extend([exp]);
-                return exp;
-            }
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -109,20 +75,6 @@ impl EqExp {
             }
         }
         sink(&TraversalStep::Leave(AstNode::EqExp(self)));
-    }
-
-    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
-        match self {
-            EqExp::RelExp(rel_exp) => rel_exp.build_ir(block_builder),
-            EqExp::EqExpOpRelExp(eq_exp, op, rel_exp) => {
-                let eq_exp = eq_exp.build_ir(block_builder);
-                let rel_exp = rel_exp.build_ir(block_builder);
-                let op = op.clone().into();
-                let exp = block_builder.new_value().binary(op, eq_exp, rel_exp);
-                block_builder.extend([exp]);
-                return exp;
-            }
-        }
     }
 }
 
@@ -158,20 +110,6 @@ impl RelExp {
             }
         }
         sink(&TraversalStep::Leave(AstNode::RelExp(self)));
-    }
-
-    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
-        match self {
-            RelExp::AddExp(add_exp) => add_exp.build_ir(block_builder),
-            RelExp::RelExpOpAddExp(rel_exp, op, add_exp) => {
-                let rel_exp = rel_exp.build_ir(block_builder);
-                let add_exp = add_exp.build_ir(block_builder);
-                let op = op.clone().into();
-                let exp = block_builder.new_value().binary(op, rel_exp, add_exp);
-                block_builder.extend([exp]);
-                return exp;
-            }
-        }
     }
 }
 
@@ -212,22 +150,6 @@ impl AddExp {
         }
         sink(&TraversalStep::Leave(AstNode::AddExp(self)));
     }
-
-    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
-        match self {
-            AddExp::MulExp(exp) => {
-                return exp.build_ir(block_builder);
-            }
-            AddExp::AddExpOpMulExp(lhs, op, rhs) => {
-                let lhs = lhs.build_ir(block_builder);
-                let rhs = rhs.build_ir(block_builder);
-                let op = op.clone().into();
-                let exp = block_builder.new_value().binary(op, lhs, rhs);
-                block_builder.extend([exp]);
-                return exp;
-            }
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -248,22 +170,6 @@ impl MulExp {
             }
         }
         sink(&TraversalStep::Leave(AstNode::MulExp(self)));
-    }
-
-    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
-        match self {
-            MulExp::UnaryExp(unary) => {
-                return unary.build_ir(block_builder);
-            }
-            MulExp::MulExpOpUnaryExp(lhs, op, rhs) => {
-                let lhs = lhs.build_ir(block_builder);
-                let rhs = rhs.build_ir(block_builder);
-                let op = op.clone().into();
-                let exp = block_builder.new_value().binary(op, lhs, rhs);
-                block_builder.extend([exp]);
-                return exp;
-            }
-        }
     }
 }
 
@@ -323,34 +229,6 @@ impl UnaryExp {
         }
         sink(&TraversalStep::Leave(AstNode::UnaryExp(self)));
     }
-
-    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
-        match self {
-            UnaryExp::PrimaryExp(pe) => {
-                return pe.build_ir(block_builder);
-            }
-            UnaryExp::UnaryOpAndExp(op, op_exp) => {
-                let op_exp = op_exp.build_ir(block_builder);
-                match op {
-                    UnaryOp::Plus => {
-                        return op_exp;
-                    }
-                    UnaryOp::Minus => {
-                        let lhs = block_builder.new_value().integer(0);
-                        let minus = block_builder.new_value().binary(BinaryOp::Sub, lhs, op_exp);
-                        block_builder.extend([minus]);
-                        return minus;
-                    }
-                    UnaryOp::Not => {
-                        let rhs = block_builder.new_value().integer(0);
-                        let not = block_builder.new_value().binary(BinaryOp::Eq, op_exp, rhs);
-                        block_builder.extend([not]);
-                        return not;
-                    }
-                }
-            }
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -373,14 +251,6 @@ impl PrimaryExp {
             PrimaryExp::LVal(l) => l.traversal(sink),
         }
         sink(&TraversalStep::Leave(AstNode::PrimaryExp(self)));
-    }
-
-    pub fn build_ir(&self, block_builder: &mut BlockBuilder) -> Value {
-        match self {
-            PrimaryExp::Exp(exp) => exp.build_ir(block_builder),
-            PrimaryExp::Number(v) => block_builder.new_value().integer(*v),
-            PrimaryExp::LVal(_) => todo!(),
-        }
     }
 }
 
