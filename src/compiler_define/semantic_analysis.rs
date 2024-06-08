@@ -53,14 +53,6 @@ pub fn const_calculate(ast_node: &ast::CompUnit) -> ConstTable {
     let sink = &mut |s: &TraversalStep| {
         if let TraversalStep::Leave(leave) = s {
             match leave {
-                AstNode::CompUnit(_) => {}
-                AstNode::FuncDef(_) => {}
-                AstNode::Block(_) => {}
-                AstNode::BlockItem(_) => {}
-                AstNode::Stmt(_) => {}
-                AstNode::Decl(_) => {}
-                AstNode::ConstDecl(_) => {}
-                AstNode::BType(_) => {}
                 AstNode::ConstDef(const_def) => {
                     let value = const_calc.get_index(0);
                     const_calc.values.clear();
@@ -68,9 +60,6 @@ pub fn const_calculate(ast_node: &ast::CompUnit) -> ConstTable {
                         .const_table
                         .insert_const(const_def.ident.clone(), value);
                 }
-                AstNode::ConstInitVal(_) => {}
-                AstNode::ConstExp(_) => {}
-                AstNode::Exp(_) => {}
                 AstNode::LOrExp(exp) => match exp {
                     LOrExp::LOrExpOpLAndExp(_, _) => {
                         let lhs = const_calc.get_index(0);
@@ -169,6 +158,7 @@ pub fn const_calculate(ast_node: &ast::CompUnit) -> ConstTable {
                 AstNode::Number(&v) => {
                     const_calc.append(v);
                 }
+                _ => {}
             }
         }
     };

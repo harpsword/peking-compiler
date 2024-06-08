@@ -14,12 +14,12 @@ mod test {
     use koopa::ir::{builder::EntityInfoQuerier, builder_traits::*, *};
 
     #[test]
-    fn test_traversal_ir_builder() {
+    fn test_parse() {
         let env = Env::default().filter_or("LOG_LEVEL", "info");
         env_logger::init_from_env(env);
 
         let mode = "-koopa".to_owned();
-        let input = "input/lv4/const1.c".to_owned();
+        let input = "input/lv4/var1.c".to_owned();
         let mut parser = SysyCompiler::new(input.into()).unwrap();
 
         parser.generate_ast();
@@ -27,18 +27,8 @@ mod test {
         let ast = parser.ast.as_ref().unwrap();
         println!("ast: {:#?}", ast);
 
-        let const_table = semantic_analysis::const_calculate(ast);
-
-        let ir = compiler_define::ir_generate::ir_generate(ast, &const_table);
-        let mut gen = KoopaGenerator::new(Vec::new());
-        gen.generate_on(&ir).unwrap();
-        let text_form_ir = from_utf8(&gen.writer()).unwrap().to_string();
-
-        println!("IR: \n {}", text_form_ir);
-
-        // semantic_analysis::const_calculate(ast);
-
         // {
+        //     parser.semantic_analysis();
         //     let ir = parser.get_ir().unwrap();
         //     let mut gen = KoopaGenerator::new(Vec::new());
         //     gen.generate_on(&ir).unwrap();
@@ -49,35 +39,6 @@ mod test {
         //     let riscv = generate_riscv(ir);
         //     println!("RISC-V: \n{}", riscv);
         // }
-    }
-
-    #[test]
-    fn test_parse() {
-        let env = Env::default().filter_or("LOG_LEVEL", "info");
-        env_logger::init_from_env(env);
-
-        let mode = "-koopa".to_owned();
-        let input = "input/lv3/24_land.c".to_owned();
-        let mut parser = SysyCompiler::new(input.into()).unwrap();
-
-        parser.generate_ast();
-
-        let ast = parser.ast.as_ref().unwrap();
-        println!("ast: {:#?}", ast);
-
-        // semantic_analysis::const_calculate(ast);
-
-        {
-            let ir = parser.get_ir().unwrap();
-            let mut gen = KoopaGenerator::new(Vec::new());
-            gen.generate_on(&ir).unwrap();
-            let text_form_ir = from_utf8(&gen.writer()).unwrap().to_string();
-
-            println!("IR: \n {}", text_form_ir);
-
-            let riscv = generate_riscv(ir);
-            println!("RISC-V: \n{}", riscv);
-        }
     }
 
     #[test]

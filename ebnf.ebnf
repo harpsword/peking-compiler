@@ -4,7 +4,7 @@ FuncDef   ::= FuncType IDENT "(" ")" Block;
 FuncType  ::= "int";
 
 # Const part
-Decl ::= ConstDecl;
+Decl ::= ConstDecl | VarDecl;
 
 ConstDecl ::= "const" BType ConstDef { "," ConstDef } ";";
 BType     ::= "int";
@@ -12,9 +12,14 @@ ConstDef  ::= IDENT "=" ConstInitVal;
 ConstInitVal ::= ConstExp;
 ConstExp ::= Exp;
 
+VarDecl ::= BType VarDef { "," VarDef } ";";
+VarDef  ::= IDENT | IDENT "=" InitVal;
+InitVal ::= Exp;
+
 Block     ::= "{" {BlockItem} "}";
 BlockItem ::= Decl | Stmt;
-Stmt      ::= "return" Exp ";";
+Stmt      ::= LVal "=" Exp ";" | 
+            "return" Exp ";";
 
 
 # -------- Expr part -----------

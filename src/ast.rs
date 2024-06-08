@@ -2,10 +2,10 @@ use crate::ir_enhance::ir_builder::*;
 use koopa::ir::{builder_traits::*, *};
 use log::info;
 
-use self::const_decl::*;
+use self::decl::*;
 use self::expr::*;
 
-pub mod const_decl;
+pub mod decl;
 pub mod expr;
 
 pub enum AstNode<'a> {
@@ -22,6 +22,10 @@ pub enum AstNode<'a> {
     ConstDef(&'a ConstDef),
     ConstInitVal(&'a ConstInitVal),
     ConstExp(&'a ConstExp),
+
+    VarDecl(&'a VarDecl),
+    VarDef(&'a VarDef),
+    InitVal(&'a InitVal),
 
     Exp(&'a Exp),
     LOrExp(&'a LOrExp),
@@ -53,6 +57,10 @@ impl AstNode<'_> {
             AstNode::ConstInitVal(_) => AstNodeKind::ConstInitVal,
             AstNode::ConstExp(_) => AstNodeKind::ConstExp,
 
+            AstNode::VarDecl(_) => AstNodeKind::VarDecl,
+            AstNode::VarDef(_) => AstNodeKind::VarDef,
+            AstNode::InitVal(_) => AstNodeKind::InitVal,
+
             AstNode::Exp(_) => AstNodeKind::Exp,
             AstNode::LOrExp(_) => AstNodeKind::LOrExp,
             AstNode::LAndExp(_) => AstNodeKind::LAndExp,
@@ -83,6 +91,10 @@ pub enum AstNodeKind {
     ConstDef,
     ConstInitVal,
     ConstExp,
+
+    VarDecl,
+    VarDef,
+    InitVal,
 
     Exp,
     LOrExp,
@@ -187,26 +199,37 @@ impl BlockItem {
 #[derive(Debug)]
 pub enum Decl {
     ConstDecl(ConstDecl),
+    VarDecl(VarDecl),
 }
 
 impl Decl {
     pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         match self {
             Decl::ConstDecl(const_decl) => const_decl.traversal(sink),
+            Decl::VarDecl(var_decl) => var_decl.traversal(sink),
         }
     }
 }
 
 /// only support return exp;
 #[derive(Debug)]
-pub struct Stmt {
-    pub exp: Box<Exp>,
+pub enum Stmt {
+    ReturnExp(Box<Exp>),
+    AssignStmt(LVal, Box<Exp>),
 }
 
 impl Stmt {
     pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::Stmt(self)));
-        self.exp.traversal(sink);
+        match self {
+            Stmt::ReturnExp(exp) => {
+                exp.traversal(sink);
+            },
+            Stmt::AssignStmt(l_val, exp) => {
+                l_val.traversal(sink);
+                exp.traversal(sink);
+            }
+        }
         sink(&TraversalStep::Leave(AstNode::Stmt(self)));
     }
 }

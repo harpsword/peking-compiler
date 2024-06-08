@@ -203,6 +203,7 @@ pub fn ir_generate(ast_node: &ast::CompUnit, value_table: &ConstTable) -> koopa:
             generator.pop_ast_kind();
             match leave {
                 AstNode::Stmt(_) => {
+                    // TODO need to handle return stmt and value modify
                     let return_value = generator.pop_return_value_option();
                     let ret = generator.new_value().ret(return_value);
                     generator.extend([ret]);

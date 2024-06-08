@@ -1,5 +1,5 @@
 use crate::ast::*;
-use crate::ast::const_decl::*;
+use crate::ast::decl::*;
 use crate::ast::expr::*;
 
 grammar;
@@ -44,7 +44,12 @@ BlockItem: BlockItem = {
 };
 
 // --------------- DECL START ----------------
-Decl: Decl = <const_decl: ConstDecl> => Decl::ConstDecl(const_decl);
+Decl: Decl = {
+  <const_decl: ConstDecl> => Decl::ConstDecl(const_decl),
+  <var_decl: VarDecl> => Decl::VarDecl(var_decl),
+}
+
+BType: BType = "int" => BType::Int;
 
 ConstDecl: ConstDecl = {
   "const" <b_type: BType> <const_def: ConstDef> <mut const_defs:("," <ConstDef>)*> ";" => {
@@ -52,21 +57,36 @@ ConstDecl: ConstDecl = {
     ConstDecl { b_type, const_defs}
   }
 };
-
-BType: BType = "int" => BType::Int;
-
 ConstDef: ConstDef = <ident: Ident> "=" <const_init_val: ConstInitVal> => {
   ConstDef { ident, const_init_val }
 };
-
 ConstInitVal: ConstInitVal = <const_exp: ConstExp> => ConstInitVal { const_exp };
-
 ConstExp: ConstExp = <exp: Exp> => ConstExp { exp };
+
+VarDecl: VarDecl = {
+  <b_type: BType> <var_def: VarDef> <mut var_defs:("," <VarDef>)*> ";" => {
+    var_defs.push(var_def);
+    VarDecl { b_type, var_defs }
+  }
+};
+VarDef: VarDef = {
+  <ident: Ident> => VarDef::IdentDefine(ident),
+  <ident: Ident> "=" <init_val: InitVal> => VarDef::IdentInitVal(ident, init_val),
+};
+InitVal: InitVal = <exp: Exp> => InitVal { exp };
+
 
 // ---------------- DECL END ----------------
 
-Stmt: Stmt = "return" <exp: Exp> ";" => Stmt { <> };
 
+// -------------- STMT START ----------------
+
+Stmt: Stmt = {
+  "return" <exp: Exp> ";" => Stmt::ReturnExp ( <> ),
+  <l_val: LVal> "=" <exp: Exp> ";" => Stmt::AssignStmt ( <> ),
+}
+
+// --------------- STMT END ----------------
 
 // --------------- EXP ----------------
 Exp: Box<Exp> = <l_or_exp: LOrExp> => Box::new(Exp{<>});
