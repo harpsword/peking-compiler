@@ -1,4 +1,6 @@
-use expr::{AddExp, EqExp, LAndExp, LOrExp, MulExp, RelExp, UnaryExp};
+use core::panic;
+
+use expr::{AddExp, EqExp, LAndExp, LOrExp, MulExp, PrimaryExp, RelExp, UnaryExp};
 use koopa::ir::{
     builder::{BasicBlockBuilder, LocalBuilder, LocalInstBuilder, ValueBuilder},
     BasicBlock, BinaryOp, Function, FunctionData, Program, Type, Value,
@@ -6,7 +8,7 @@ use koopa::ir::{
 
 use crate::ast::{self, *};
 
-use super::symbol_table::ConstTable;
+use super::symbol_table::SymbolTable;
 
 struct IRGenerator {
     program: Program,
@@ -84,6 +86,12 @@ impl IRGenerator {
     fn ast_kind_stack_has(&self, kind: AstNodeKind) -> bool {
         self.ast_node_kind_stack.contains(&kind)
     }
+
+    fn ast_kind_stack_check_last(&self, kind: AstNodeKind) -> bool {
+        self.ast_node_kind_stack
+            .last()
+            .map_or(false, |k| *k == kind)
+    }
 }
 
 fn common_expression(generator: &mut IRGenerator, op: impl Into<BinaryOp>) {
@@ -95,7 +103,7 @@ fn common_expression(generator: &mut IRGenerator, op: impl Into<BinaryOp>) {
     generator.append_return_value(or);
 }
 
-fn exp_ir_generate(generator: &mut IRGenerator, ast: &AstNode, value_table: &ConstTable) {
+fn exp_ir_generate(generator: &mut IRGenerator, ast: &AstNode, value_table: &SymbolTable) {
     if !ast.get_kind().is_expression() {
         return;
     }
@@ -160,23 +168,35 @@ fn exp_ir_generate(generator: &mut IRGenerator, ast: &AstNode, value_table: &Con
             },
             _ => {}
         },
+        AstNode::PrimaryExp(_) => {}
         AstNode::Number(v) => {
             let value = generator.new_value().integer(**v);
             generator.append_return_value(value);
         }
         AstNode::LVal(name) => {
-            let value = value_table
-                .get_const(&name.ident)
-                .expect("should define it before");
-            let value = generator.new_value().integer(value);
-            generator.append_return_value(value);
+            if generator.ast_kind_stack_check_last(AstNodeKind::PrimaryExp) {
+                let value = match value_table
+                    .get_symbol(&name.ident)
+                    .expect(format!("should define {}", name.ident).as_str())
+                {
+                    super::symbol_table::Symbol::Const(value) => {
+                        generator.new_value().integer(*value)
+                    }
+                    super::symbol_table::Symbol::Var(variable) => {
+                        let load = generator.new_value().load(*variable);
+                        generator.extend([load]);
+                        load
+                    }
+                };
+                generator.append_return_value(value);
+            }
         }
 
         _ => {}
     }
 }
 
-pub fn ir_generate(ast_node: &ast::CompUnit, value_table: &ConstTable) -> koopa::ir::Program {
+pub fn ir_generate(ast_node: &ast::CompUnit, value_table: &mut SymbolTable) -> koopa::ir::Program {
     let mut generator = IRGenerator::new();
 
     let sink = &mut |s: &ast::TraversalStep| {
@@ -202,11 +222,44 @@ pub fn ir_generate(ast_node: &ast::CompUnit, value_table: &ConstTable) -> koopa:
         if let TraversalStep::Leave(leave) = s {
             generator.pop_ast_kind();
             match leave {
-                AstNode::Stmt(_) => {
-                    let return_value = generator.pop_return_value_option();
-                    let ret = generator.new_value().ret(return_value);
-                    generator.extend([ret]);
-                }
+                AstNode::Stmt(stmt) => match stmt {
+                    Stmt::ReturnExp(_) => {
+                        let return_value = generator.pop_return_value_option();
+                        let ret = generator.new_value().ret(return_value);
+                        generator.extend([ret]);
+                    }
+                    Stmt::AssignStmt(l_val, _) => {
+                        let rhs = generator.pop_return_value();
+
+                        let lhs_name = &l_val.ident;
+                        let symbol = value_table
+                            .get_symbol(lhs_name)
+                            .expect(format!("should define {}", lhs_name).as_str());
+                        let dest = match symbol {
+                            super::symbol_table::Symbol::Const(_) => {
+                                panic!("const cannot be modified");
+                            }
+                            super::symbol_table::Symbol::Var(var) => var.clone(),
+                        };
+
+                        let store = generator.new_value().store(rhs, dest);
+                        generator.extend([store]);
+                    }
+                },
+                AstNode::VarDef(var_def) => match var_def {
+                    decl::VarDef::IdentDefine(ident) => {
+                        let alloc = generator.new_value().alloc(Type::get_i32());
+                        generator.extend([alloc]);
+                        value_table.insert_var(ident.clone(), alloc);
+                    }
+                    decl::VarDef::IdentInitVal(ident, _) => {
+                        let rhs = generator.pop_return_value();
+                        let alloc = generator.new_value().alloc(Type::get_i32());
+                        let store = generator.new_value().store(rhs, alloc);
+                        generator.extend([alloc, store]);
+                        value_table.insert_var(ident.clone(), alloc);
+                    }
+                },
 
                 _ => {}
             }

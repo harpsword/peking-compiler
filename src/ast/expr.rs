@@ -248,7 +248,9 @@ impl PrimaryExp {
                 sink(&TraversalStep::Enter(AstNode::Number(n)));
                 sink(&TraversalStep::Leave(AstNode::Number(n)));
             }
-            PrimaryExp::LVal(l) => l.traversal(sink),
+            PrimaryExp::LVal(l_val) => {
+                l_val.traversal(sink);
+            }
         }
         sink(&TraversalStep::Leave(AstNode::PrimaryExp(self)));
     }
