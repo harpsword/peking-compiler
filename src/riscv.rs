@@ -21,6 +21,9 @@ impl RiskVCode {
     }
 }
 
+/// Instruction
+///
+/// 默认第一个元素是dst
 pub(crate) enum Instruction<'a> {
     Slt(&'a str, &'a str, &'a str),
 
@@ -37,10 +40,11 @@ pub(crate) enum Instruction<'a> {
     Snez(&'a str, &'a str),
 
     Add(&'a str, &'a str, &'a str),
+    Addi(&'a str, &'a str, i32),
     Sub(&'a str, &'a str, &'a str),
     Mul(&'a str, &'a str, &'a str),
     Div(&'a str, &'a str, &'a str),
-    // get remainder
+    /// get remainder
     Rem(&'a str, &'a str, &'a str),
 
     And(&'a str, &'a str, &'a str),
@@ -48,6 +52,16 @@ pub(crate) enum Instruction<'a> {
 
     Li(&'a str, i32),
     Mov(&'a str, &'a str),
+
+    /// Sw(dst, src)
+    /// write src to dst
+    /// dst should be like 0(sp)
+    Sw(&'a str, &'a str),
+
+    /// Lw(dst, src)
+    /// read src to dst
+    /// src should be like 0(sp)
+    Lw(&'a str, &'a str),
     Ret,
 }
 
@@ -64,6 +78,7 @@ impl<'a> Into<String> for Instruction<'a> {
             Instruction::Snez(dst, src) => format!("  sltu {dst}, x0, {src}"),
 
             Instruction::Add(dst, lhs, rhs) => format!("  add {dst}, {lhs}, {rhs}"),
+            Instruction::Addi(dst, lhs, rhs) => format!("  addi {dst}, {lhs}, {rhs}"),
             Instruction::Sub(dst, lhs, rhs) => format!("  sub {dst}, {lhs}, {rhs}"),
             Instruction::Mul(dst, lhs, rhs) => format!("  mul {dst}, {lhs}, {rhs}"),
             Instruction::Div(dst, lhs, rhs) => format!("  div {dst}, {lhs}, {rhs}"),
@@ -74,6 +89,8 @@ impl<'a> Into<String> for Instruction<'a> {
 
             Instruction::Li(dst, src) => format!("  li {dst}, {src}"),
             Instruction::Mov(dst, src) => format!("  mv {dst}, {src}"),
+            Instruction::Sw(dst, src) => format!("  sw {src}, {dst}"),
+            Instruction::Lw(dst, src) => format!("  lw {dst}, {src}"),
             Instruction::Ret => format!("  ret"),
         }
     }

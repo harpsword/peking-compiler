@@ -53,7 +53,7 @@ BType: BType = "int" => BType::Int;
 
 ConstDecl: ConstDecl = {
   "const" <b_type: BType> <const_def: ConstDef> <mut const_defs:("," <ConstDef>)*> ";" => {
-    const_defs.push(const_def);
+    const_defs.insert(0, const_def);
     ConstDecl { b_type, const_defs}
   }
 };
@@ -65,7 +65,7 @@ ConstExp: ConstExp = <exp: Exp> => ConstExp { exp };
 
 VarDecl: VarDecl = {
   <b_type: BType> <var_def: VarDef> <mut var_defs:("," <VarDef>)*> ";" => {
-    var_defs.push(var_def);
+    var_defs.insert(0, var_def);
     VarDecl { b_type, var_defs }
   }
 };

@@ -248,7 +248,9 @@ impl PrimaryExp {
                 sink(&TraversalStep::Enter(AstNode::Number(n)));
                 sink(&TraversalStep::Leave(AstNode::Number(n)));
             }
-            PrimaryExp::LVal(_) => {}
+            PrimaryExp::LVal(l_val) => {
+                l_val.traversal(sink);
+            }
         }
         sink(&TraversalStep::Leave(AstNode::PrimaryExp(self)));
     }
@@ -257,4 +259,11 @@ impl PrimaryExp {
 #[derive(Debug)]
 pub struct LVal {
     pub ident: String,
+}
+
+impl LVal {
+    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        sink(&TraversalStep::Enter(AstNode::LVal(self)));
+        sink(&TraversalStep::Leave(AstNode::LVal(self)));
+    }
 }

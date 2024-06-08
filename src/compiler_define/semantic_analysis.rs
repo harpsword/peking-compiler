@@ -41,13 +41,11 @@ impl ConstCalculation {
         &mut self.const_table
     }
 
-    fn get_index(&self, index: usize) -> i32 {
-        assert!(index < self.values.len());
-        self.values[index]
+    fn pop_return_value(&mut self) -> i32 {
+        self.values.pop().expect("should have value")
     }
 
-    fn set_to_value(&mut self, value: i32) {
-        self.values.clear();
+    fn push_return_value(&mut self, value: i32) {
         self.values.push(value);
     }
 
@@ -84,7 +82,7 @@ pub fn const_calculate(ast_node: &ast::CompUnit) -> SymbolTable {
             }
             match leave {
                 AstNode::ConstDef(const_def) => {
-                    let value = const_calc.get_index(0);
+                    let value = const_calc.pop_return_value();
                     const_calc.values.clear();
                     const_calc
                         .const_table
@@ -92,77 +90,77 @@ pub fn const_calculate(ast_node: &ast::CompUnit) -> SymbolTable {
                 }
                 AstNode::LOrExp(exp) => match exp {
                     LOrExp::LOrExpOpLAndExp(_, _) => {
-                        let lhs = const_calc.get_index(0);
-                        let rhs = const_calc.get_index(1);
+                        let rhs = const_calc.pop_return_value();
+                        let lhs = const_calc.pop_return_value();
                         let value = (lhs != 0) || (rhs != 0);
-                        const_calc.set_to_value(value as i32);
+                        const_calc.push_return_value(value as i32);
                     }
                     _ => {}
                 },
                 AstNode::LAndExp(exp) => match exp {
                     LAndExp::LAndExpOpEqExp(_, _) => {
-                        let lhs = const_calc.get_index(0);
-                        let rhs = const_calc.get_index(1);
+                        let rhs = const_calc.pop_return_value();
+                        let lhs = const_calc.pop_return_value();
                         let value = (lhs != 0) && (rhs != 0);
-                        const_calc.set_to_value(value as i32);
+                        const_calc.push_return_value(value as i32);
                     }
                     _ => {}
                 },
                 AstNode::EqExp(exp) => match exp {
                     EqExp::EqExpOpRelExp(_, op, _) => {
-                        let lhs = const_calc.get_index(0);
-                        let rhs = const_calc.get_index(1);
+                        let rhs = const_calc.pop_return_value();
+                        let lhs = const_calc.pop_return_value();
                         let value = match op {
                             expr::EqExpOp::Eq => lhs == rhs,
                             expr::EqExpOp::Ne => lhs != rhs,
                         };
-                        const_calc.set_to_value(value as i32);
+                        const_calc.push_return_value(value as i32);
                     }
                     _ => {}
                 },
                 AstNode::RelExp(exp) => match exp {
                     RelExp::RelExpOpAddExp(_, op, _) => {
-                        let lhs = const_calc.get_index(0);
-                        let rhs = const_calc.get_index(1);
+                        let rhs = const_calc.pop_return_value();
+                        let lhs = const_calc.pop_return_value();
                         let value = match op {
                             expr::RelExpOp::Lt => lhs < rhs,
                             expr::RelExpOp::Gt => lhs > rhs,
                             expr::RelExpOp::Le => lhs <= rhs,
                             expr::RelExpOp::Ge => lhs >= rhs,
                         };
-                        const_calc.set_to_value(value as i32);
+                        const_calc.push_return_value(value as i32);
                     }
                     _ => {}
                 },
                 AstNode::AddExp(exp) => match exp {
                     AddExp::AddExpOpMulExp(_, op, _) => {
-                        let lhs = const_calc.get_index(0);
-                        let rhs = const_calc.get_index(1);
+                        let rhs = const_calc.pop_return_value();
+                        let lhs = const_calc.pop_return_value();
                         let value = match op {
                             expr::AddOp::Plus => lhs + rhs,
                             expr::AddOp::Minus => lhs - rhs,
                         };
-                        const_calc.set_to_value(value);
+                        const_calc.push_return_value(value);
                     }
                     _ => {}
                 },
                 AstNode::MulExp(exp) => match exp {
                     MulExp::MulExpOpUnaryExp(_, op, _) => {
-                        let lhs = const_calc.get_index(0);
-                        let rhs = const_calc.get_index(1);
+                        let rhs = const_calc.pop_return_value();
+                        let lhs = const_calc.pop_return_value();
 
                         let value = match op {
                             expr::MulOp::Mul => lhs * rhs,
                             expr::MulOp::Div => lhs / rhs,
                             expr::MulOp::Mod => lhs % rhs,
                         };
-                        const_calc.set_to_value(value);
+                        const_calc.push_return_value(value);
                     }
                     _ => {}
                 },
                 AstNode::UnaryExp(exp) => match exp {
                     UnaryExp::UnaryOpAndExp(op, _) => {
-                        let mut value = const_calc.get_index(0);
+                        let mut value = const_calc.pop_return_value();
                         value = match op {
                             expr::UnaryOp::Plus => value,
                             expr::UnaryOp::Minus => -value,
@@ -174,13 +172,14 @@ pub fn const_calculate(ast_node: &ast::CompUnit) -> SymbolTable {
                                 }
                             }
                         };
-                        const_calc.set_to_value(value);
+                        const_calc.push_return_value(value);
                     }
                     _ => {}
                 },
                 AstNode::PrimaryExp(_) => {}
                 AstNode::LVal(name) => {
                     let value = const_calc.const_table().get_const(&name.ident);
+                    info!("name: {:?}, value: {:?}", name.ident, value);
                     assert!(value.is_some());
 
                     const_calc.append(value.expect("should has value when calc exp value"));

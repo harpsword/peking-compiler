@@ -4,6 +4,7 @@ use koopa::ir::{
     values::{self},
     Function, FunctionData, Program, Value, ValueKind,
 };
+use log::info;
 use once_cell::sync::Lazy;
 
 use crate::riscv::{Instruction, RiskVCode};
@@ -21,11 +22,52 @@ struct RiscvGenerator {
     registers: Vec<String>,
     instruction_results: HashMap<Value, InstructionExplanation>,
     result: RiskVCode,
+    stack_manager: StackManager,
+}
+
+#[derive(Debug)]
+struct StackManager {
+    size: usize,
+    used: usize,
+}
+
+impl StackManager {
+    fn new() -> Self {
+        Self { size: 0, used: 0 }
+    }
+
+    fn set_size(&mut self, size: usize) {
+        self.size = size;
+    }
+
+    fn assign(&mut self, size: usize) -> Option<usize> {
+        if self.used + size > self.size {
+            return None;
+        }
+        let offset = self.used;
+        self.used = self.used + size;
+        Some(offset)
+    }
+}
+
+#[derive(Debug, Clone)]
+enum InstructionResult {
+    Register(String),
+    Stack(usize),
+}
+
+impl InstructionResult {
+    fn to_string(self) -> String {
+        match self {
+            InstructionResult::Register(reg) => reg,
+            InstructionResult::Stack(offset) => format!("{}(sp)", offset),
+        }
+    }
 }
 
 #[derive(Clone)]
 struct InstructionExplanation {
-    result_register: Option<String>,
+    dst: Option<InstructionResult>,
     is_finished: bool,
 }
 
@@ -42,6 +84,8 @@ static REGISTER_LIST: Lazy<Vec<String>> = Lazy::new(|| {
     ]
 });
 
+const X0: &str = "x0";
+
 impl RiscvGenerator {
     fn new() -> Self {
         Self {
@@ -49,6 +93,7 @@ impl RiscvGenerator {
             registers: REGISTER_LIST.to_vec(),
             result: RiskVCode::new(),
             instruction_results: HashMap::new(),
+            stack_manager: StackManager::new(),
         }
     }
 
@@ -58,7 +103,7 @@ impl RiscvGenerator {
         }
         InstructionExplanation {
             is_finished: false,
-            result_register: None,
+            dst: None,
         }
     }
 
@@ -82,8 +127,10 @@ impl RiscvGenerator {
     }
 
     // release register
-    // TODO when need to call this ?
     fn release_register(&mut self, register: String) {
+        if register == X0 {
+            return;
+        }
         let occuption = self.register_occupition.insert(register, false);
         // occuption should be exist and true
         assert!(occuption.is_some());
@@ -114,198 +161,238 @@ impl RiscvGenerator {
         let func_name = Self::extract_func_name_from_koopa_func(func_data.name());
         self.result.append(format!("{}:", func_name));
 
+        let mut size = 0;
+        for (_, node) in func_data.layout().bbs() {
+            for &inst in node.insts().keys() {
+                let value_data = func_data.dfg().value(inst);
+                info!(
+                    "name: {:?}, ty: {}, size: {}",
+                    value_data.name(),
+                    value_data.ty(),
+                    value_data.ty().size()
+                );
+                size = size + value_data.ty().size();
+            }
+        }
+        size = (size + 15) / 16 * 16;
+        self.stack_manager.set_size(size);
+        let size: i32 = size.try_into().unwrap();
+
+        // assign stack space first
+        if size > 0 {
+            self.result.append(Instruction::Addi("sp", "sp", -size));
+        }
+
+        // deal with other instructions
         for (_, node) in func_data.layout().bbs() {
             for &inst in node.insts().keys() {
                 self.generate_riscv_for_instruction(func_data, inst);
             }
         }
+
+        self.stack_manager.set_size(0);
+    }
+
+    // used to load data from register or stack
+    // for register, return register name
+    // for stack, return dst of stack loading data
+    fn load_value(
+        &mut self,
+        func: &FunctionData,
+        value: Value,
+        stack_load_to_register: bool,
+    ) -> String {
+        let value = self.generate_riscv_for_instruction(func, value).unwrap();
+        match value {
+            InstructionResult::Register(register) => register,
+            InstructionResult::Stack(_) => {
+                if stack_load_to_register {
+                    let register = self.assign_register();
+                    self.result
+                        .append(Instruction::Lw(&register, &value.to_string()));
+                    return register;
+                } else {
+                    return value.to_string();
+                }
+            }
+        }
     }
 
     // generate riscv for instruction
-    // return register name
+    // return dst
     fn generate_riscv_for_instruction(
         &mut self,
         func: &FunctionData,
         value: Value,
-    ) -> Option<String> {
+    ) -> Option<InstructionResult> {
         let instr_result = self.get_instruction_result(value);
         if instr_result.is_finished {
-            return instr_result.result_register;
+            return instr_result.dst;
         }
 
         let value_data = func.dfg().value(value);
-        let value_result_register = match value_data.kind() {
+        let size = value_data.ty().size();
+        let dst = match value_data.kind() {
+            ValueKind::Alloc(_) => {
+                let dst = self.stack_manager.assign(size);
+                dst.map(|x| InstructionResult::Stack(x))
+            }
+            ValueKind::Store(s) => {
+                let value = self.load_value(func, s.value(), true);
+                let dst = self.load_value(func, s.dest(), false);
+                self.result.append(Instruction::Sw(&dst, &value));
+
+                self.release_register(value);
+                None
+            }
+            ValueKind::Load(load) => {
+                // load src to register
+                let src = self.load_value(func, load.src(), true);
+
+                // write register to dst
+                let dst = self
+                    .stack_manager
+                    .assign(size)
+                    .expect("should have stack space");
+                let dst = InstructionResult::Stack(dst);
+                self.result
+                    .append(Instruction::Sw(&dst.clone().to_string(), &src));
+
+                self.release_register(src);
+                Some(dst)
+            }
             ValueKind::Integer(x) => {
-                if x.value() == 0 {
-                    Some("x0".to_string())
+                let register = if x.value() == 0 {
+                    "x0".to_string()
                 } else {
                     let register = self.assign_register();
                     self.result.append(Instruction::Li(&register, x.value()));
-                    Some(register)
-                }
+                    register
+                };
+                Some(InstructionResult::Register(register))
             }
             ValueKind::Return(r) => {
                 if let Some(return_value) = r.value() {
-                    let register = self
+                    let src = self
                         .generate_riscv_for_instruction(func, return_value)
                         .unwrap();
-                    self.result.append(Instruction::Mov("a0", &register));
+                    match src {
+                        InstructionResult::Register(register) => {
+                            self.result.append(Instruction::Mov("a0", &register));
+                        }
+                        InstructionResult::Stack(_) => {
+                            self.result.append(Instruction::Lw("a0", &src.to_string()));
+                        }
+                    }
                 }
+
+                let size: i32 = self.stack_manager.size.try_into().unwrap();
+                if size > 0 {
+                    self.result.append(Instruction::Addi("sp", "sp", size));
+                }
+
                 self.result.append(Instruction::Ret);
                 None
             }
             ValueKind::Binary(binary) => {
-                // only need to support Eq and Sub
-                let lhs_register = self
-                    .generate_riscv_for_instruction(func, binary.lhs())
-                    .unwrap();
-                let rhs_register = self
-                    .generate_riscv_for_instruction(func, binary.rhs())
-                    .unwrap();
-                let destination_register = if lhs_register == "x0" && rhs_register == "x0" {
-                    self.assign_register()
-                } else if lhs_register == "x0" {
-                    rhs_register.clone()
-                } else {
-                    // rhs_register == "x0"
-                    // or all is not "x0"
-                    lhs_register.clone()
-                };
+                let lhs = self.load_value(func, binary.lhs(), true);
+                let rhs = self.load_value(func, binary.rhs(), true);
+                let destination_register = self.assign_register();
                 match binary.op() {
                     values::BinaryOp::Eq => {
-                        self.result.append(Instruction::Xor(
-                            &destination_register,
-                            &lhs_register,
-                            &rhs_register,
-                        ));
+                        self.result
+                            .append(Instruction::Xor(&destination_register, &lhs, &rhs));
                         self.result.append(Instruction::Seqz(
                             &destination_register,
                             &destination_register,
                         ));
-                        Some(destination_register)
                     }
                     values::BinaryOp::NotEq => {
-                        self.result.append(Instruction::Xor(
-                            &destination_register,
-                            &lhs_register,
-                            &rhs_register,
-                        ));
+                        self.result
+                            .append(Instruction::Xor(&destination_register, &lhs, &rhs));
                         self.result.append(Instruction::Snez(
                             &destination_register,
                             &destination_register,
                         ));
-                        Some(destination_register)
                     }
                     values::BinaryOp::Sub => {
-                        self.result.append(Instruction::Sub(
-                            &destination_register,
-                            &lhs_register,
-                            &rhs_register,
-                        ));
-                        Some(destination_register)
+                        self.result
+                            .append(Instruction::Sub(&destination_register, &lhs, &rhs));
                     }
                     values::BinaryOp::Add => {
-                        self.result.append(Instruction::Add(
-                            &destination_register,
-                            &lhs_register,
-                            &rhs_register,
-                        ));
-                        Some(destination_register)
+                        self.result
+                            .append(Instruction::Add(&destination_register, &lhs, &rhs));
                     }
                     values::BinaryOp::Mul => {
-                        self.result.append(Instruction::Mul(
-                            &destination_register,
-                            &lhs_register,
-                            &rhs_register,
-                        ));
-                        Some(destination_register)
+                        self.result
+                            .append(Instruction::Mul(&destination_register, &lhs, &rhs));
                     }
                     values::BinaryOp::Div => {
-                        self.result.append(Instruction::Div(
-                            &destination_register,
-                            &lhs_register,
-                            &rhs_register,
-                        ));
-                        Some(destination_register)
+                        self.result
+                            .append(Instruction::Div(&destination_register, &lhs, &rhs));
                     }
                     values::BinaryOp::Mod => {
-                        self.result.append(Instruction::Rem(
-                            &destination_register,
-                            &lhs_register,
-                            &rhs_register,
-                        ));
-                        Some(destination_register)
+                        self.result
+                            .append(Instruction::Rem(&destination_register, &lhs, &rhs));
                     }
                     values::BinaryOp::Or => {
-                        self.result.append(Instruction::Or(
-                            &destination_register,
-                            &lhs_register,
-                            &rhs_register,
-                        ));
+                        self.result
+                            .append(Instruction::Or(&destination_register, &lhs, &rhs));
                         self.result.append(Instruction::Snez(
                             &destination_register,
                             &destination_register,
                         ));
-                        Some(destination_register)
                     }
                     values::BinaryOp::And => {
+                        self.result.append(Instruction::Snez(&lhs, &lhs));
+                        self.result.append(Instruction::Snez(&rhs, &rhs));
                         self.result
-                            .append(Instruction::Snez(&lhs_register, &lhs_register));
-                        self.result
-                            .append(Instruction::Snez(&rhs_register, &rhs_register));
-                        self.result.append(Instruction::And(
-                            &destination_register,
-                            &lhs_register,
-                            &rhs_register,
-                        ));
-                        Some(destination_register)
+                            .append(Instruction::And(&destination_register, &lhs, &rhs));
                     }
 
                     values::BinaryOp::Gt => {
-                        self.result.append(Instruction::Slt(
-                            &destination_register,
-                            &rhs_register,
-                            &lhs_register,
-                        ));
-                        Some(destination_register)
+                        self.result
+                            .append(Instruction::Slt(&destination_register, &rhs, &lhs));
                     }
                     values::BinaryOp::Lt => {
-                        self.result.append(Instruction::Slt(
-                            &destination_register,
-                            &lhs_register,
-                            &rhs_register,
-                        ));
-                        Some(destination_register)
+                        self.result
+                            .append(Instruction::Slt(&destination_register, &lhs, &rhs));
                     }
                     values::BinaryOp::Ge => {
-                        self.result.append(Instruction::Slt(
-                            &destination_register,
-                            &lhs_register,
-                            &rhs_register,
-                        ));
+                        self.result
+                            .append(Instruction::Slt(&destination_register, &lhs, &rhs));
                         self.result.append(Instruction::Xori(
                             &destination_register,
                             &destination_register,
                             1,
                         ));
-                        Some(destination_register)
                     }
                     values::BinaryOp::Le => {
-                        self.result.append(Instruction::Slt(
-                            &destination_register,
-                            &rhs_register,
-                            &lhs_register,
-                        ));
+                        self.result
+                            .append(Instruction::Slt(&destination_register, &rhs, &lhs));
                         self.result.append(Instruction::Xori(
                             &destination_register,
                             &destination_register,
                             1,
                         ));
-                        Some(destination_register)
                     }
-
                     _ => unreachable!(),
                 }
+
+                let destination = InstructionResult::Stack(
+                    self.stack_manager
+                        .assign(size)
+                        .expect("should have stack space"),
+                );
+
+                self.result.append(Instruction::Sw(
+                    &destination.clone().to_string(),
+                    &destination_register,
+                ));
+                self.release_register(lhs);
+                self.release_register(rhs);
+                self.release_register(destination_register);
+                Some(destination)
             }
             _ => unreachable!(),
         };
@@ -314,10 +401,10 @@ impl RiscvGenerator {
             value,
             InstructionExplanation {
                 is_finished: true,
-                result_register: value_result_register.clone(),
+                dst: dst.clone(),
             },
         );
 
-        value_result_register
+        dst
     }
 }

@@ -1,5 +1,6 @@
 use ir_generate::ir_generate;
 use koopa::ir::Program;
+use log::info;
 use semantic_analysis::const_calculate;
 
 use crate::{ast, sysy};
@@ -39,6 +40,8 @@ impl SysyCompiler {
         let ast = self.ast.as_ref().expect("need to build ast first");
         let const_table = const_calculate(ast);
         self.const_symbols = const_table;
+
+        info!("const table: {:#?}", self.const_symbols);
     }
 
     pub fn generate_ast(&mut self) {
