@@ -7,7 +7,7 @@ mod test {
 
     use crate::{
         ast::{Block, BlockItem, CompUnit, Decl, FuncDef},
-        compiler_define::{self, semantic_analysis, symbol_table::ConstTable, SysyCompiler},
+        compiler_define::{self, semantic_analysis, symbol_table::SymbolTable, SysyCompiler},
         ir_enhance::generate_riscv,
     };
 
@@ -27,18 +27,18 @@ mod test {
         let ast = parser.ast.as_ref().unwrap();
         println!("ast: {:#?}", ast);
 
-        // {
-        //     parser.semantic_analysis();
-        //     let ir = parser.get_ir().unwrap();
-        //     let mut gen = KoopaGenerator::new(Vec::new());
-        //     gen.generate_on(&ir).unwrap();
-        //     let text_form_ir = from_utf8(&gen.writer()).unwrap().to_string();
+        {
+            parser.semantic_analysis();
+            let ir = parser.get_ir().unwrap();
+            let mut gen = KoopaGenerator::new(Vec::new());
+            gen.generate_on(&ir).unwrap();
+            let text_form_ir = from_utf8(&gen.writer()).unwrap().to_string();
 
-        //     println!("IR: \n {}", text_form_ir);
+            println!("IR: \n {}", text_form_ir);
 
-        //     let riscv = generate_riscv(ir);
-        //     println!("RISC-V: \n{}", riscv);
-        // }
+            // let riscv = generate_riscv(ir);
+            // println!("RISC-V: \n{}", riscv);
+        }
     }
 
     #[test]
@@ -71,18 +71,39 @@ mod test {
             let bb = main_data.dfg_mut().new_bb().basic_block(None);
             let _ = main_data.layout_mut().bbs_mut().push_key_back(bb);
 
-            let lhs = main_data.dfg_mut().new_value().integer(11);
-            let rhs = main_data.dfg_mut().new_value().integer(31);
-            let add = main_data
-                .dfg_mut()
-                .new_value()
-                .binary(BinaryOp::Add, lhs, rhs);
-            let ret = main_data.dfg_mut().new_value().ret(Some(add));
+            let variable = main_data.dfg_mut().new_value().alloc(Type::get_i32());
+            let store_value = main_data.dfg_mut().new_value().integer(10);
+            let store = main_data.dfg_mut().new_value().store(store_value, variable);
             main_data
                 .layout_mut()
                 .bb_mut(bb)
                 .insts_mut()
-                .extend([add, ret]);
+                .extend([variable, store]);
+
+            let varaible1 = main_data.dfg_mut().new_value().load(variable);
+            let add = main_data
+                .dfg_mut()
+                .new_value()
+                .binary(BinaryOp::Add, varaible1, store_value);
+
+            main_data
+                .layout_mut()
+                .bb_mut(bb)
+                .insts_mut()
+                .extend([varaible1, add]);
+
+            // let lhs = main_data.dfg_mut().new_value().integer(11);
+            // let rhs = main_data.dfg_mut().new_value().integer(31);
+            // let add = main_data
+            //     .dfg_mut()
+            //     .new_value()
+            //     .binary(BinaryOp::Add, lhs, rhs);
+            // let ret = main_data.dfg_mut().new_value().ret(Some(add));
+            // main_data
+            //     .layout_mut()
+            //     .bb_mut(bb)
+            //     .insts_mut()
+            //     .extend([add, ret]);
         }
 
         let mut gen = KoopaGenerator::new(Vec::new());
@@ -90,5 +111,4 @@ mod test {
         let text_form_ir = std::str::from_utf8(&gen.writer()).unwrap().to_string();
         println!("{}", text_form_ir);
     }
-
 }

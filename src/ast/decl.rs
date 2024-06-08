@@ -64,7 +64,6 @@ impl ConstExp {
     }
 }
 
-
 #[derive(Debug)]
 pub struct VarDecl {
     pub b_type: BType,
@@ -90,10 +89,10 @@ impl VarDef {
     pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::VarDef(self)));
         match self {
-            VarDef::IdentDefine(_) => {},
+            VarDef::IdentDefine(_) => {}
             VarDef::IdentInitVal(_, init_val) => {
                 init_val.traversal(sink);
-            },
+            }
         }
         sink(&TraversalStep::Leave(AstNode::VarDef(self)));
     }

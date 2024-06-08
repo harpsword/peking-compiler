@@ -224,9 +224,8 @@ impl Stmt {
         match self {
             Stmt::ReturnExp(exp) => {
                 exp.traversal(sink);
-            },
+            }
             Stmt::AssignStmt(l_val, exp) => {
-                l_val.traversal(sink);
                 exp.traversal(sink);
             }
         }

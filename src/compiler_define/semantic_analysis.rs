@@ -11,20 +11,25 @@ use crate::ast;
 use crate::ast::AstNode;
 use crate::ast::TraversalStep;
 use crate::ast::*;
+use crate::ir_enhance::generate_riscv;
 
-use super::symbol_table::ConstTable;
+use super::symbol_table::SymbolTable;
 
 struct ConstCalculation {
     values: Vec<i32>,
 
-    const_table: ConstTable,
+    const_table: SymbolTable,
+
+    ast_node_kind_stack: Vec<AstNodeKind>,
 }
 
 impl ConstCalculation {
     fn new() -> Self {
         Self {
             values: Vec::new(),
-            const_table: ConstTable::new(),
+            const_table: SymbolTable::new(),
+
+            ast_node_kind_stack: Vec::new(),
         }
     }
 
@@ -32,7 +37,7 @@ impl ConstCalculation {
         self.values.push(value);
     }
 
-    fn const_table(&mut self) -> &mut ConstTable {
+    fn const_table(&mut self) -> &mut SymbolTable {
         &mut self.const_table
     }
 
@@ -45,13 +50,38 @@ impl ConstCalculation {
         self.values.clear();
         self.values.push(value);
     }
+
+    // TODO opt, duplicate code
+    /// ast kind
+    fn append_ast_kind(&mut self, kind: AstNodeKind) {
+        self.ast_node_kind_stack.push(kind)
+    }
+
+    /// ast kind
+    fn pop_ast_kind(&mut self) -> AstNodeKind {
+        self.ast_node_kind_stack
+            .pop()
+            .expect("should have ast node kind")
+    }
+
+    fn ast_kind_stack_has(&self, kind: AstNodeKind) -> bool {
+        self.ast_node_kind_stack.contains(&kind)
+    }
 }
 
-pub fn const_calculate(ast_node: &ast::CompUnit) -> ConstTable {
+pub fn const_calculate(ast_node: &ast::CompUnit) -> SymbolTable {
     let mut const_calc = ConstCalculation::new();
 
     let sink = &mut |s: &TraversalStep| {
+        if let TraversalStep::Enter(enter) = s {
+            const_calc.append_ast_kind(enter.get_kind());
+        }
+
         if let TraversalStep::Leave(leave) = s {
+            const_calc.pop_ast_kind();
+            if !const_calc.ast_kind_stack_has(AstNodeKind::ConstDecl) {
+                return;
+            }
             match leave {
                 AstNode::ConstDef(const_def) => {
                     let value = const_calc.get_index(0);
