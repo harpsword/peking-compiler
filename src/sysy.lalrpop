@@ -82,8 +82,10 @@ InitVal: InitVal = <exp: Exp> => InitVal { exp };
 // -------------- STMT START ----------------
 
 Stmt: Stmt = {
-  "return" <exp: Exp> ";" => Stmt::ReturnExp ( <> ),
   <l_val: LVal> "=" <exp: Exp> ";" => Stmt::AssignStmt ( <> ),
+  <exp: Exp?> ";" => Stmt::ExpStmt ( <> ),
+  <block: Block> => Stmt::BlockStmt ( <> ),
+  "return" <exp: Exp> ";" => Stmt::ReturnExp ( <> ),
 }
 
 // --------------- STMT END ----------------

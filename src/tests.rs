@@ -20,7 +20,7 @@ mod test {
 
         let mode = "-koopa".to_owned();
         // let input = "input/lv3/27_complex_binary.c".to_owned();
-        let input = "input/lv4/01_const_expr.c".to_owned();
+        let input = "input/lv5/1.c".to_owned();
         let mut parser = SysyCompiler::new(input.into()).unwrap();
 
         parser.generate_ast();
@@ -29,7 +29,6 @@ mod test {
         println!("ast: {:#?}", ast);
 
         {
-            parser.semantic_analysis();
             let ir = parser.get_ir().unwrap();
             let mut gen = KoopaGenerator::new(Vec::new());
             gen.generate_on(&ir).unwrap();

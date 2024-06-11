@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use koopa::ir::Value;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Symbol {
     Const(i32),
     Var(Value),
@@ -41,7 +41,7 @@ impl SymbolTable {
         self.symbol_table.insert(name, Symbol::Var(value));
     }
 
-    pub(crate) fn get_var(&mut self, name: &str) -> Option<Value> {
+    pub(crate) fn get_var(&self, name: &str) -> Option<Value> {
         let symbol = self.symbol_table.get(name)?;
         if let Symbol::Var(value) = symbol {
             return Some(*value);

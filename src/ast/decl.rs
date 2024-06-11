@@ -1,6 +1,6 @@
 use env_logger::init;
 
-use super::{AstNode, Exp, TraversalStep};
+use super::{AstNode, Exp, Traversal, TraversalStep};
 
 #[derive(Debug)]
 pub struct ConstDecl {
@@ -8,8 +8,8 @@ pub struct ConstDecl {
     pub const_defs: Vec<ConstDef>,
 }
 
-impl ConstDecl {
-    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+impl Traversal for ConstDecl {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::ConstDecl(self)));
         for const_def in self.const_defs.iter() {
             const_def.traversal(sink);
@@ -30,8 +30,8 @@ pub struct ConstDef {
     pub const_init_val: ConstInitVal,
 }
 
-impl ConstDef {
-    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+impl Traversal for ConstDef {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::ConstDef(self)));
         self.const_init_val.traversal(sink);
         sink(&TraversalStep::Leave(AstNode::ConstDef(self)));
@@ -43,8 +43,8 @@ pub struct ConstInitVal {
     pub const_exp: ConstExp,
 }
 
-impl ConstInitVal {
-    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+impl Traversal for ConstInitVal {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::ConstInitVal(self)));
         self.const_exp.traversal(sink);
         sink(&TraversalStep::Leave(AstNode::ConstInitVal(self)));
@@ -56,8 +56,8 @@ pub struct ConstExp {
     pub exp: Box<Exp>,
 }
 
-impl ConstExp {
-    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+impl Traversal for ConstExp {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::ConstExp(self)));
         self.exp.traversal(sink);
         sink(&TraversalStep::Leave(AstNode::ConstExp(self)));
@@ -70,8 +70,8 @@ pub struct VarDecl {
     pub var_defs: Vec<VarDef>,
 }
 
-impl VarDecl {
-    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+impl Traversal for VarDecl {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::VarDecl(self)));
         for var_def in self.var_defs.iter() {
             var_def.traversal(sink);
@@ -85,8 +85,8 @@ pub enum VarDef {
     IdentInitVal(String, InitVal),
 }
 
-impl VarDef {
-    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+impl Traversal for VarDef {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::VarDef(self)));
         match self {
             VarDef::IdentDefine(_) => {}
@@ -103,8 +103,8 @@ pub struct InitVal {
     pub exp: Box<Exp>,
 }
 
-impl InitVal {
-    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+impl Traversal for InitVal {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::InitVal(self)));
         self.exp.traversal(sink);
         sink(&TraversalStep::Leave(AstNode::InitVal(self)));

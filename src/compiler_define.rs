@@ -2,6 +2,7 @@ use ir_generate::ir_generate;
 use koopa::ir::Program;
 use log::info;
 use semantic_analysis::const_calculate;
+use symbol_table::SymbolTable;
 
 use crate::{ast, sysy};
 use std::{fs::read_to_string, io::Result, path::PathBuf};
@@ -12,9 +13,6 @@ pub mod symbol_table;
 
 pub struct SysyCompiler {
     file: String,
-
-    // interval result
-    const_symbols: symbol_table::SymbolTable,
 
     // result
     pub ast: Option<ast::CompUnit>,
@@ -28,20 +26,9 @@ impl SysyCompiler {
         Ok(Self {
             file: file,
 
-            const_symbols: symbol_table::SymbolTable::new(),
-
             ast: Option::None,
             ir: Option::None,
         })
-    }
-
-    pub fn semantic_analysis(&mut self) {
-        // const value computation, should return a const value table
-        let ast = self.ast.as_ref().expect("need to build ast first");
-        let const_table = const_calculate(ast);
-        self.const_symbols = const_table;
-
-        info!("const table: {:#?}", self.const_symbols);
     }
 
     pub fn generate_ast(&mut self) {
@@ -50,8 +37,6 @@ impl SysyCompiler {
     }
 
     pub fn get_ir(&mut self) -> Option<Program> {
-        self.ast
-            .as_ref()
-            .map(|ast| ir_generate(ast, &mut self.const_symbols))
+        self.ast.as_ref().map(|ast| ir_generate(ast))
     }
 }

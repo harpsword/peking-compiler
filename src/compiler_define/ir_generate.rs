@@ -1,4 +1,5 @@
 use core::panic;
+use std::mem;
 
 use expr::{AddExp, EqExp, LAndExp, LOrExp, MulExp, PrimaryExp, RelExp, UnaryExp};
 use koopa::ir::{
@@ -8,7 +9,10 @@ use koopa::ir::{
 
 use crate::ast::{self, *};
 
-use super::symbol_table::SymbolTable;
+use super::{
+    semantic_analysis,
+    symbol_table::{self, SymbolTable},
+};
 
 struct IRGenerator {
     program: Program,
@@ -16,6 +20,11 @@ struct IRGenerator {
     block: Option<BasicBlock>,
     return_values: Vec<Value>,
     ast_node_kind_stack: Vec<AstNodeKind>,
+
+    // when get a new symbol table, append it
+    // when exit a symbol table, pop it
+    // when search a symbol, start from the tail
+    symbol_tables: Vec<SymbolTable>,
 }
 
 impl IRGenerator {
@@ -26,9 +35,101 @@ impl IRGenerator {
             block: Option::None,
             return_values: Vec::new(),
             ast_node_kind_stack: Vec::new(),
+
+            symbol_tables: vec![SymbolTable::new()],
         }
     }
 
+    fn append_ast_kind(&mut self, kind: AstNodeKind) {
+        self.ast_node_kind_stack.push(kind)
+    }
+
+    fn pop_ast_kind(&mut self) -> AstNodeKind {
+        self.ast_node_kind_stack
+            .pop()
+            .expect("should have ast node kind")
+    }
+
+    fn ast_kind_stack_has(&self, kind: AstNodeKind) -> bool {
+        self.ast_node_kind_stack.contains(&kind)
+    }
+
+    fn ast_kind_stack_check_last(&self, kind: AstNodeKind) -> bool {
+        self.ast_node_kind_stack
+            .last()
+            .map_or(false, |k| *k == kind)
+    }
+}
+
+impl IRGenerator {
+    fn current_symbol_table(&mut self) -> &mut SymbolTable {
+        self.symbol_tables
+            .last_mut()
+            .expect("should have symbol table")
+    }
+
+    // when enter a new block, append current_symbol_table, and create a new one
+    fn new_current_symbol_table(&mut self) {
+        self.symbol_tables.push(SymbolTable::new());
+    }
+
+    // when close a block, pop the symbol table to current_symbol_table
+    fn pop_current_symbol_table(&mut self) {
+        let _ = self.symbol_tables.pop().expect("should have symbol table");
+    }
+
+    fn get_symbol(&self, name: &str) -> Option<&symbol_table::Symbol> {
+        for symbol_table in self.symbol_tables.iter().rev() {
+            if let Some(symbol) = symbol_table.get_symbol(name) {
+                return Some(symbol);
+            }
+        }
+        None
+    }
+
+    fn insert_const(&mut self, name: String, value: i32) {
+        self.current_symbol_table().insert_const(name, value);
+    }
+
+    fn get_const(&self, name: &str) -> Option<i32> {
+        for symbol_table in self.symbol_tables.iter().rev() {
+            if let Some(symbol) = symbol_table.get_const(name) {
+                return Some(symbol);
+            }
+        }
+        None
+    }
+
+    fn insert_var(&mut self, name: String, value: Value) {
+        self.current_symbol_table().insert_var(name, value);
+    }
+
+    fn get_var(&mut self, name: &str) -> Option<Value> {
+        for symbol_table in self.symbol_tables.iter().rev() {
+            if let Some(symbol) = symbol_table.get_var(name) {
+                return Some(symbol);
+            }
+        }
+        None
+    }
+}
+
+impl IRGenerator {
+    fn pop_return_value_option(&mut self) -> Option<Value> {
+        self.return_values.pop()
+    }
+
+    fn pop_return_value(&mut self) -> Value {
+        self.return_values.pop().expect("should have return value")
+    }
+
+    fn append_return_value(&mut self, value: Value) {
+        self.return_values.push(value);
+    }
+}
+
+/// Adapt to the koopa IR
+impl IRGenerator {
     fn func_data(&mut self) -> &mut FunctionData {
         self.program
             .func_mut(self.function.expect("function not found"))
@@ -58,40 +159,6 @@ impl IRGenerator {
     fn new_value(&mut self) -> LocalBuilder {
         self.func_data().dfg_mut().new_value()
     }
-
-    fn pop_return_value_option(&mut self) -> Option<Value> {
-        self.return_values.pop()
-    }
-
-    fn pop_return_value(&mut self) -> Value {
-        self.return_values.pop().expect("should have return value")
-    }
-
-    fn append_return_value(&mut self, value: Value) {
-        self.return_values.push(value);
-    }
-
-    /// ast kind
-    fn append_ast_kind(&mut self, kind: AstNodeKind) {
-        self.ast_node_kind_stack.push(kind)
-    }
-
-    /// ast kind
-    fn pop_ast_kind(&mut self) -> AstNodeKind {
-        self.ast_node_kind_stack
-            .pop()
-            .expect("should have ast node kind")
-    }
-
-    fn ast_kind_stack_has(&self, kind: AstNodeKind) -> bool {
-        self.ast_node_kind_stack.contains(&kind)
-    }
-
-    fn ast_kind_stack_check_last(&self, kind: AstNodeKind) -> bool {
-        self.ast_node_kind_stack
-            .last()
-            .map_or(false, |k| *k == kind)
-    }
 }
 
 fn common_expression(generator: &mut IRGenerator, op: impl Into<BinaryOp>) {
@@ -103,7 +170,7 @@ fn common_expression(generator: &mut IRGenerator, op: impl Into<BinaryOp>) {
     generator.append_return_value(or);
 }
 
-fn exp_ir_generate(generator: &mut IRGenerator, ast: &AstNode, value_table: &SymbolTable) {
+fn exp_ir_generate(generator: &mut IRGenerator, ast: &AstNode) {
     if !ast.get_kind().is_expression() {
         return;
     }
@@ -175,15 +242,17 @@ fn exp_ir_generate(generator: &mut IRGenerator, ast: &AstNode, value_table: &Sym
         }
         AstNode::LVal(name) => {
             if generator.ast_kind_stack_check_last(AstNodeKind::PrimaryExp) {
-                let value = match value_table
+                // only deal with LVal inside Expression
+                let symbol = generator
                     .get_symbol(&name.ident)
                     .expect(format!("should define {}", name.ident).as_str())
-                {
+                    .clone();
+                let value = match symbol {
                     super::symbol_table::Symbol::Const(value) => {
-                        generator.new_value().integer(*value)
+                        generator.new_value().integer(value)
                     }
                     super::symbol_table::Symbol::Var(variable) => {
-                        let load = generator.new_value().load(*variable);
+                        let load = generator.new_value().load(variable);
                         generator.extend([load]);
                         load
                     }
@@ -196,7 +265,7 @@ fn exp_ir_generate(generator: &mut IRGenerator, ast: &AstNode, value_table: &Sym
     }
 }
 
-pub fn ir_generate(ast_node: &ast::CompUnit, value_table: &mut SymbolTable) -> koopa::ir::Program {
+pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
     let mut generator = IRGenerator::new();
 
     let sink = &mut |s: &ast::TraversalStep| {
@@ -211,10 +280,20 @@ pub fn ir_generate(ast_node: &ast::CompUnit, value_table: &mut SymbolTable) -> k
                     );
 
                     generator.new_function(func_data);
-                }
-                AstNode::Block(_) => {
                     generator.new_block(Some("@entry".to_owned()));
                 }
+                AstNode::Block(_) => {
+                    generator.new_current_symbol_table();
+                }
+                AstNode::ConstDecl(const_decl) => {
+                    semantic_analysis::const_calculate(
+                        *const_decl,
+                        generator.current_symbol_table(),
+                    );
+                }
+                // TODO change exp to evaluate at this time
+                // and in this time cal exp.traversal function to
+                // calculate it like const calculation
                 _ => {}
             }
         }
@@ -232,7 +311,7 @@ pub fn ir_generate(ast_node: &ast::CompUnit, value_table: &mut SymbolTable) -> k
                         let rhs = generator.pop_return_value();
 
                         let lhs_name = &l_val.ident;
-                        let symbol = value_table
+                        let symbol = generator
                             .get_symbol(lhs_name)
                             .expect(format!("should define {}", lhs_name).as_str());
                         let dest = match symbol {
@@ -245,28 +324,33 @@ pub fn ir_generate(ast_node: &ast::CompUnit, value_table: &mut SymbolTable) -> k
                         let store = generator.new_value().store(rhs, dest);
                         generator.extend([store]);
                     }
+                    Stmt::ExpStmt(_) => {}
+                    Stmt::BlockStmt(_) => {}
                 },
                 AstNode::VarDef(var_def) => match var_def {
                     decl::VarDef::IdentDefine(ident) => {
                         let alloc = generator.new_value().alloc(Type::get_i32());
                         generator.extend([alloc]);
-                        value_table.insert_var(ident.clone(), alloc);
+                        generator.insert_var(ident.clone(), alloc);
                     }
                     decl::VarDef::IdentInitVal(ident, _) => {
                         let rhs = generator.pop_return_value();
                         let alloc = generator.new_value().alloc(Type::get_i32());
                         let store = generator.new_value().store(rhs, alloc);
                         generator.extend([alloc, store]);
-                        value_table.insert_var(ident.clone(), alloc);
+                        generator.insert_var(ident.clone(), alloc);
                     }
                 },
+                AstNode::Block(_) => {
+                    generator.pop_current_symbol_table();
+                }
 
                 _ => {}
             }
 
             // expression in const decl shouldn't generate ir
             if !generator.ast_kind_stack_has(AstNodeKind::ConstDecl) {
-                exp_ir_generate(&mut generator, leave, value_table);
+                exp_ir_generate(&mut generator, leave);
             }
         }
     };

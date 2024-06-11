@@ -62,8 +62,6 @@ fn main() -> Result<()> {
 
     compiler.generate_ast();
 
-    compiler.semantic_analysis();
-
     let ir = compiler.get_ir().unwrap();
 
     let output = if args.output_riscv {

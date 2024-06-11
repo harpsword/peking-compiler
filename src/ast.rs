@@ -133,13 +133,17 @@ pub enum TraversalStep<'a> {
     Leave(AstNode<'a>),
 }
 
+pub trait Traversal {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep));
+}
+
 #[derive(Debug)]
 pub struct CompUnit {
     pub func_def: FuncDef,
 }
 
-impl CompUnit {
-    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+impl Traversal for CompUnit {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::CompUnit(self)));
         self.func_def.traversal(sink);
         sink(&TraversalStep::Leave(AstNode::CompUnit(self)));
@@ -153,8 +157,8 @@ pub struct FuncDef {
     pub block: Block,
 }
 
-impl FuncDef {
-    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+impl Traversal for FuncDef {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::FuncDef(self)));
         self.block.traversal(sink);
         sink(&TraversalStep::Leave(AstNode::FuncDef(self)));
@@ -171,8 +175,8 @@ pub struct Block {
     pub block_items: Vec<BlockItem>,
 }
 
-impl Block {
-    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+impl Traversal for Block {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::Block(self)));
         for block_item in self.block_items.iter() {
             block_item.traversal(sink);
@@ -187,8 +191,8 @@ pub enum BlockItem {
     Decl(Decl),
 }
 
-impl BlockItem {
-    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+impl Traversal for BlockItem {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         match self {
             BlockItem::Stmt(stmt) => stmt.traversal(sink),
             BlockItem::Decl(decl) => decl.traversal(sink),
@@ -202,8 +206,8 @@ pub enum Decl {
     VarDecl(VarDecl),
 }
 
-impl Decl {
-    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+impl Traversal for Decl {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         match self {
             Decl::ConstDecl(const_decl) => const_decl.traversal(sink),
             Decl::VarDecl(var_decl) => var_decl.traversal(sink),
@@ -214,19 +218,30 @@ impl Decl {
 /// only support return exp;
 #[derive(Debug)]
 pub enum Stmt {
-    ReturnExp(Box<Exp>),
     AssignStmt(LVal, Box<Exp>),
+    ExpStmt(Option<Box<Exp>>),
+    BlockStmt(Block),
+    ReturnExp(Box<Exp>),
 }
 
-impl Stmt {
-    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+impl Traversal for Stmt {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::Stmt(self)));
         match self {
             Stmt::ReturnExp(exp) => {
                 exp.traversal(sink);
             }
             Stmt::AssignStmt(l_val, exp) => {
+                l_val.traversal(sink);
                 exp.traversal(sink);
+            }
+            Stmt::ExpStmt(exp) => {
+                if let Some(exp) = exp {
+                    exp.traversal(sink);
+                }
+            }
+            Stmt::BlockStmt(block) => {
+                block.traversal(sink);
             }
         }
         sink(&TraversalStep::Leave(AstNode::Stmt(self)));

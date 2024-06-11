@@ -1,15 +1,15 @@
 use crate::ir_enhance::ir_builder::*;
 use koopa::ir::{builder_traits::*, *};
 
-use super::{AstNode, TraversalStep};
+use super::{AstNode, Traversal, TraversalStep};
 
 #[derive(Debug)]
 pub struct Exp {
     pub l_or_exp: Box<LOrExp>,
 }
 
-impl Exp {
-    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+impl Traversal for Exp {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::Exp(self)));
         self.l_or_exp.traversal(sink);
         sink(&TraversalStep::Leave(AstNode::Exp(self)));
@@ -23,8 +23,8 @@ pub enum LOrExp {
     LOrExpOpLAndExp(Box<LOrExp>, Box<LAndExp>),
 }
 
-impl LOrExp {
-    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+impl Traversal for LOrExp {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::LOrExp(self)));
         match self {
             LOrExp::LAndExp(l_and_exp) => l_and_exp.traversal(sink),
@@ -44,8 +44,8 @@ pub enum LAndExp {
     LAndExpOpEqExp(Box<LAndExp>, Box<EqExp>),
 }
 
-impl LAndExp {
-    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+impl Traversal for LAndExp {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::LAndExp(self)));
         match self {
             LAndExp::EqExp(eq_exp) => eq_exp.traversal(sink),
@@ -64,8 +64,8 @@ pub enum EqExp {
     EqExpOpRelExp(Box<EqExp>, EqExpOp, Box<RelExp>),
 }
 
-impl EqExp {
-    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+impl Traversal for EqExp {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::EqExp(self)));
         match self {
             EqExp::RelExp(rel_exp) => rel_exp.traversal(sink),
@@ -99,8 +99,8 @@ pub enum RelExp {
     RelExpOpAddExp(Box<RelExp>, RelExpOp, Box<AddExp>),
 }
 
-impl RelExp {
-    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+impl Traversal for RelExp {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::RelExp(self)));
         match self {
             RelExp::AddExp(add_exp) => add_exp.traversal(sink),
@@ -138,8 +138,8 @@ pub enum AddExp {
     AddExpOpMulExp(Box<AddExp>, AddOp, Box<MulExp>),
 }
 
-impl AddExp {
-    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+impl Traversal for AddExp {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::AddExp(self)));
         match self {
             AddExp::MulExp(mul_exp) => mul_exp.traversal(sink),
@@ -159,8 +159,8 @@ pub enum MulExp {
     MulExpOpUnaryExp(Box<MulExp>, MulOp, Box<UnaryExp>),
 }
 
-impl MulExp {
-    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+impl Traversal for MulExp {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::MulExp(self)));
         match self {
             MulExp::UnaryExp(unary_exp) => unary_exp.traversal(sink),
@@ -218,8 +218,8 @@ pub enum UnaryExp {
     UnaryOpAndExp(UnaryOp, Box<UnaryExp>),
 }
 
-impl UnaryExp {
-    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+impl Traversal for UnaryExp {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::UnaryExp(self)));
         match self {
             UnaryExp::PrimaryExp(pe) => pe.traversal(sink),
@@ -239,8 +239,8 @@ pub enum PrimaryExp {
     LVal(LVal),
 }
 
-impl PrimaryExp {
-    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+impl Traversal for PrimaryExp {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::PrimaryExp(self)));
         match self {
             PrimaryExp::Exp(exp) => exp.traversal(sink),
@@ -261,8 +261,8 @@ pub struct LVal {
     pub ident: String,
 }
 
-impl LVal {
-    pub fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+impl Traversal for LVal {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::LVal(self)));
         sink(&TraversalStep::Leave(AstNode::LVal(self)));
     }

@@ -7,19 +7,16 @@ use expr::RelExp;
 use expr::UnaryExp;
 use log::info;
 
-use crate::ast;
 use crate::ast::AstNode;
 use crate::ast::TraversalStep;
 use crate::ast::*;
-use crate::ir_enhance::generate_riscv;
 
 use super::symbol_table::SymbolTable;
 
 struct ConstCalculation {
     values: Vec<i32>,
 
-    const_table: SymbolTable,
-
+    // const_table: SymbolTable,
     ast_node_kind_stack: Vec<AstNodeKind>,
 }
 
@@ -27,8 +24,7 @@ impl ConstCalculation {
     fn new() -> Self {
         Self {
             values: Vec::new(),
-            const_table: SymbolTable::new(),
-
+            // const_table: SymbolTable::new(),
             ast_node_kind_stack: Vec::new(),
         }
     }
@@ -37,9 +33,9 @@ impl ConstCalculation {
         self.values.push(value);
     }
 
-    fn const_table(&mut self) -> &mut SymbolTable {
-        &mut self.const_table
-    }
+    // fn const_table(&mut self) -> &mut SymbolTable {
+    //     &mut self.const_table
+    // }
 
     fn pop_return_value(&mut self) -> i32 {
         self.values.pop().expect("should have value")
@@ -67,7 +63,7 @@ impl ConstCalculation {
     }
 }
 
-pub fn const_calculate(ast_node: &ast::CompUnit) -> SymbolTable {
+pub fn const_calculate(ast_node: &impl Traversal, symbol: &mut SymbolTable) {
     let mut const_calc = ConstCalculation::new();
 
     let sink = &mut |s: &TraversalStep| {
@@ -84,9 +80,11 @@ pub fn const_calculate(ast_node: &ast::CompUnit) -> SymbolTable {
                 AstNode::ConstDef(const_def) => {
                     let value = const_calc.pop_return_value();
                     const_calc.values.clear();
-                    const_calc
-                        .const_table
-                        .insert_const(const_def.ident.clone(), value);
+
+                    symbol.insert_const(const_def.ident.clone(), value);
+                    // const_calc
+                    //     .const_table
+                    //     .insert_const(const_def.ident.clone(), value);
                 }
                 AstNode::LOrExp(exp) => match exp {
                     LOrExp::LOrExpOpLAndExp(_, _) => {
@@ -178,7 +176,7 @@ pub fn const_calculate(ast_node: &ast::CompUnit) -> SymbolTable {
                 },
                 AstNode::PrimaryExp(_) => {}
                 AstNode::LVal(name) => {
-                    let value = const_calc.const_table().get_const(&name.ident);
+                    let value = symbol.get_const(&name.ident);
                     info!("name: {:?}, value: {:?}", name.ident, value);
                     assert!(value.is_some());
 
@@ -194,7 +192,5 @@ pub fn const_calculate(ast_node: &ast::CompUnit) -> SymbolTable {
 
     ast_node.traversal(sink);
 
-    info!("const table: {:#?}", const_calc.const_table);
-
-    const_calc.const_table
+    info!("const table: {:#?}", symbol);
 }
