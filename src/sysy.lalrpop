@@ -87,15 +87,23 @@ Stmt: Stmt = {
 }
 
 UnmatchedIfStmt: Stmt = {
-  "if" "(" <exp: Exp> ")" <stmt: Stmt> => Stmt::IfStmt ( exp, Box::new(stmt) ),
+  "if" "(" <exp: Exp> ")" <stmt: Stmt> => Stmt::IfElseStmt ( exp, Box::new(stmt), None ),
 }
 
+/*
+TODO
+
+if (Exp) Stmt
+else if (Exp) Stmt
+
+这种语句无法parse
+*/
 MatchedStmt: Stmt = {
   <l_val: LVal> "=" <exp: Exp> ";" => Stmt::AssignStmt ( <> ),
   <exp: Exp?> ";" => Stmt::ExpStmt ( <> ),
   <block: Block> => Stmt::BlockStmt ( <> ),
   "return" <exp: Exp> ";" => Stmt::ReturnExp ( <> ),
-  "if" "(" <exp: Exp> ")" <stmt1: MatchedStmt> "else" <stmt2: MatchedStmt> => Stmt::IfElseStmt ( exp, Box::new(stmt1), Box::new(stmt2) ),
+  "if" "(" <exp: Exp> ")" <stmt1: MatchedStmt> "else" <stmt2: MatchedStmt> => Stmt::IfElseStmt ( exp, Box::new(stmt1), Some(Box::new(stmt2)) ),
 }
 
 // --------------- STMT END ----------------

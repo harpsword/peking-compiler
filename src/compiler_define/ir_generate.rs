@@ -326,7 +326,6 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
                     }
                     Stmt::ExpStmt(_) => {}
                     Stmt::BlockStmt(_) => {}
-                    Stmt::IfStmt(_, _) => todo!(),
                     Stmt::IfElseStmt(_, _, _) => todo!(),
                     
                 },
