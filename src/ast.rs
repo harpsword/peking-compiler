@@ -222,6 +222,9 @@ pub enum Stmt {
     ExpStmt(Option<Box<Exp>>),
     BlockStmt(Block),
     ReturnExp(Box<Exp>),
+
+    IfStmt(Box<Exp>, Box<Stmt>),
+    IfElseStmt(Box<Exp>, Box<Stmt>, Box<Stmt>),
 }
 
 impl Traversal for Stmt {
@@ -243,6 +246,8 @@ impl Traversal for Stmt {
             Stmt::BlockStmt(block) => {
                 block.traversal(sink);
             }
+            Stmt::IfStmt(_, _) => todo!(),
+            Stmt::IfElseStmt(_, _, _) => todo!(),
         }
         sink(&TraversalStep::Leave(AstNode::Stmt(self)));
     }
