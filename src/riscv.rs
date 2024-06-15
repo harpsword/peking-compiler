@@ -62,6 +62,14 @@ pub(crate) enum Instruction<'a> {
     /// read src to dst
     /// src should be like 0(sp)
     Lw(&'a str, &'a str),
+
+    /// bnez cond, target
+    /// if cond != 0, jump to target
+    Bnez(&'a str, &'a str),
+
+    /// j target
+    /// Jump to target
+    Jump(&'a str),
     Ret,
 }
 
@@ -91,6 +99,9 @@ impl<'a> Into<String> for Instruction<'a> {
             Instruction::Mov(dst, src) => format!("  mv {dst}, {src}"),
             Instruction::Sw(dst, src) => format!("  sw {src}, {dst}"),
             Instruction::Lw(dst, src) => format!("  lw {dst}, {src}"),
+
+            Instruction::Bnez(cond, target) => format!("  bnez {cond}, {target}"),
+            Instruction::Jump(target) => format!("  j {target}"),
             Instruction::Ret => format!("  ret"),
         }
     }
