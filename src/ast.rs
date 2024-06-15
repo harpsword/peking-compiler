@@ -14,8 +14,12 @@ pub enum AstNode<'a> {
 
     Block(&'a Block),
     BlockItem(&'a BlockItem),
-    Stmt(&'a Stmt),
     Decl(&'a Decl),
+
+    Stmt(&'a Stmt),
+    IfCond(&'a IfCond),
+    ThenStmt(&'a ThenStmt),
+    ElseStmt(&'a ElseStmt),
 
     ConstDecl(&'a ConstDecl),
     BType(&'a BType),
@@ -48,8 +52,12 @@ impl AstNode<'_> {
 
             AstNode::Block(_) => AstNodeKind::Block,
             AstNode::BlockItem(_) => AstNodeKind::BlockItem,
-            AstNode::Stmt(_) => AstNodeKind::Stmt,
             AstNode::Decl(_) => AstNodeKind::Decl,
+
+            AstNode::Stmt(_) => AstNodeKind::Stmt,
+            AstNode::IfCond(_) => AstNodeKind::IfCond,
+            AstNode::ThenStmt(_) => AstNodeKind::ThenStmt,
+            AstNode::ElseStmt(_) => AstNodeKind::ElseStmt,
 
             AstNode::ConstDecl(_) => AstNodeKind::ConstDecl,
             AstNode::BType(_) => AstNodeKind::BType,
@@ -83,8 +91,12 @@ pub enum AstNodeKind {
 
     Block,
     BlockItem,
-    Stmt,
     Decl,
+
+    Stmt,
+    IfCond,
+    ThenStmt,
+    ElseStmt,
 
     ConstDecl,
     BType,
@@ -223,7 +235,7 @@ pub enum Stmt {
     BlockStmt(Block),
     ReturnExp(Box<Exp>),
 
-    IfElseStmt(Box<Exp>, Box<Stmt>, Option<Box<Stmt>>),
+    IfElseStmt(IfCond, ThenStmt, Option<ElseStmt>),
 }
 
 impl Traversal for Stmt {
@@ -251,8 +263,47 @@ impl Traversal for Stmt {
                 if let Some(else_stmt) = else_stmt {
                     else_stmt.traversal(sink);
                 }
-            },
+            }
         }
         sink(&TraversalStep::Leave(AstNode::Stmt(self)));
+    }
+}
+
+#[derive(Debug)]
+pub struct IfCond {
+    pub exp: Box<Exp>,
+}
+
+impl Traversal for IfCond {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        sink(&TraversalStep::Enter(AstNode::IfCond(self)));
+        self.exp.traversal(sink);
+        sink(&TraversalStep::Leave(AstNode::IfCond(self)));
+    }
+}
+
+#[derive(Debug)]
+pub struct ThenStmt {
+    pub stmt: Box<Stmt>,
+}
+
+impl Traversal for ThenStmt {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        sink(&TraversalStep::Enter(AstNode::ThenStmt(self)));
+        self.stmt.traversal(sink);
+        sink(&TraversalStep::Leave(AstNode::ThenStmt(self)));
+    }
+}
+
+#[derive(Debug)]
+pub struct ElseStmt {
+    pub stmt: Box<Stmt>,
+}
+
+impl Traversal for ElseStmt {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        sink(&TraversalStep::Enter(AstNode::ElseStmt(self)));
+        self.stmt.traversal(sink);
+        sink(&TraversalStep::Leave(AstNode::ElseStmt(self)));
     }
 }

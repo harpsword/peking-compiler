@@ -87,7 +87,7 @@ Stmt: Stmt = {
 }
 
 UnmatchedIfStmt: Stmt = {
-  "if" "(" <exp: Exp> ")" <stmt: Stmt> => Stmt::IfElseStmt ( exp, Box::new(stmt), None ),
+  "if" "(" <exp: Exp> ")" <stmt: Stmt> => Stmt::IfElseStmt ( IfCond{exp: exp}, ThenStmt{stmt: Box::new(stmt)}, None ),
 }
 
 /*
@@ -103,7 +103,8 @@ MatchedStmt: Stmt = {
   <exp: Exp?> ";" => Stmt::ExpStmt ( <> ),
   <block: Block> => Stmt::BlockStmt ( <> ),
   "return" <exp: Exp> ";" => Stmt::ReturnExp ( <> ),
-  "if" "(" <exp: Exp> ")" <stmt1: MatchedStmt> "else" <stmt2: MatchedStmt> => Stmt::IfElseStmt ( exp, Box::new(stmt1), Some(Box::new(stmt2)) ),
+  "if" "(" <exp: Exp> ")" <stmt1: MatchedStmt> "else" <stmt2: MatchedStmt> => 
+    Stmt::IfElseStmt ( IfCond{exp: exp}, ThenStmt{stmt: Box::new(stmt1)}, Some(ElseStmt{stmt: Box::new(stmt2)}) ),
 }
 
 // --------------- STMT END ----------------
