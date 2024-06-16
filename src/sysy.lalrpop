@@ -82,12 +82,17 @@ InitVal: InitVal = <exp: Exp> => InitVal { exp };
 // -------------- STMT START ----------------
 
 Stmt: Stmt = {
-  <MatchedStmt> => <>,
   <UnmatchedIfStmt> => <>,
+  <MatchedStmt> => <>,
 }
 
 UnmatchedIfStmt: Stmt = {
-  "if" "(" <exp: Exp> ")" <stmt: Stmt> => Stmt::IfElseStmt ( IfCond{exp: exp}, ThenStmt{stmt: Box::new(stmt)}, None ),
+  "if" "(" <exp: Exp> ")" <stmt: Stmt> => 
+    Stmt::IfElseStmt ( IfCond{exp: exp}, ThenStmt{stmt: Box::new(stmt)}, None ),
+
+  
+  "if" "(" <exp: Exp> ")" <stmt: MatchedStmt> "else" <stmt2: UnmatchedIfStmt> => 
+    Stmt::IfElseStmt ( IfCond{exp: exp}, ThenStmt{stmt: Box::new(stmt)}, Some(ElseStmt{stmt: Box::new(stmt2)}) ),
 }
 
 /*

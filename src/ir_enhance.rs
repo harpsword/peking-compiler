@@ -185,7 +185,6 @@ impl RiscvGenerator {
         // deal with other instructions
         for (bb, node) in func_data.layout().bbs() {
 
-            // TODO delete duplicate code
             let bb_name = tools::get_bb_name(func_data, *bb);
             if let Some(bb_name) = bb_name {
                 self.result.append(format!("{}:", bb_name));
@@ -408,6 +407,7 @@ impl RiscvGenerator {
                 self.result.append(Instruction::Bnez(&cond, then_bb));
                 self.result.append(Instruction::Jump(else_bb));
 
+                self.release_register(cond);
                 None
             }
             ValueKind::Jump(jump) => {

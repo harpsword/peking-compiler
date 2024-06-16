@@ -30,6 +30,7 @@ struct IRGenerator {
 
     // for if elsed
     // contains: (then_block, else_block)
+    if_else_then_count: usize,
     if_else_then_stack: Vec<(BasicBlock, BasicBlock, BasicBlock)>,
 }
 
@@ -43,6 +44,7 @@ impl IRGenerator {
             ast_node_kind_stack: Vec::new(),
 
             symbol_tables: vec![SymbolTable::new()],
+            if_else_then_count: 0,
             if_else_then_stack: Vec::new(),
         }
     }
@@ -137,12 +139,13 @@ impl IRGenerator {
 
 impl IRGenerator {
     fn push_if_else(&mut self) {
-        let if_else_count = &format!("{}", self.if_else_then_stack.len());
+        let if_else_count = &format!("{}", self.if_else_then_count);
         let then_block = self.new_block(Some("@then".to_string() + if_else_count));
         let else_block = self.new_block(Some("@else".to_string() + if_else_count));
         let end_block = self.new_block(Some("@end".to_string() + if_else_count));
         self.if_else_then_stack
             .push((then_block, else_block, end_block));
+        self.if_else_then_count += 1;
     }
 
     fn pop_if_else(&mut self) {
