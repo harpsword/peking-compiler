@@ -95,14 +95,6 @@ UnmatchedIfStmt: Stmt = {
     Stmt::IfElseStmt ( IfCond{exp: exp}, ThenStmt{stmt: Box::new(stmt)}, Some(ElseStmt{stmt: Box::new(stmt2)}) ),
 }
 
-/*
-TODO
-
-if (Exp) Stmt
-else if (Exp) Stmt
-
-这种语句无法parse
-*/
 MatchedStmt: Stmt = {
   <l_val: LVal> "=" <exp: Exp> ";" => Stmt::AssignStmt ( <> ),
   <exp: Exp?> ";" => Stmt::ExpStmt ( <> ),

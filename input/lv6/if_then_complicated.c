@@ -5,6 +5,7 @@ int main() {
     if (a > 3) 
       return a;
     else 
+    if (a > 3)
       return a;
 
   return -1;
