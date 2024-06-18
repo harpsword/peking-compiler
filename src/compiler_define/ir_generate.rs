@@ -29,9 +29,13 @@ struct IRGenerator {
     symbol_tables: Vec<SymbolTable>,
 
     // for if elsed
-    // contains: (then_block, else_block)
+    // contains: (then_block, else_block, end_block)
     if_else_then_count: usize,
     if_else_then_stack: Vec<(BasicBlock, BasicBlock, BasicBlock)>,
+
+    while_count: usize,
+    // contains: (while_cond_block, while_body_block, end_block)
+    while_stack: Vec<(BasicBlock, BasicBlock, BasicBlock)>,
 }
 
 impl IRGenerator {
@@ -46,6 +50,9 @@ impl IRGenerator {
             symbol_tables: vec![SymbolTable::new()],
             if_else_then_count: 0,
             if_else_then_stack: Vec::new(),
+
+            while_count: 0,
+            while_stack: Vec::new(),
         }
     }
 
@@ -159,6 +166,30 @@ impl IRGenerator {
                 (then_block.clone(), else_block.clone(), end_block.clone())
             })
             .expect("should have if-else then")
+    }
+}
+
+impl IRGenerator {
+    fn push_while(&mut self) {
+        let while_count = &format!("{}", self.while_count);
+        let while_entry = self.new_block(Some("@while_entry".to_string() + while_count));
+        let while_body = self.new_block(Some("@while_body".to_string() + while_count));
+        let while_end = self.new_block(Some("@while_end".to_string() + while_count));
+        self.while_stack.push((while_entry, while_body, while_end));
+        self.while_count += 1;
+    }
+
+    fn pop_while(&mut self) {
+        self.while_stack.pop();
+    }
+
+    fn current_while(&mut self) -> (BasicBlock, BasicBlock, BasicBlock) {
+        self.while_stack
+            .last()
+            .map(|(while_entry, while_body, while_end)| {
+                (while_entry.clone(), while_body.clone(), while_end.clone())
+            })
+            .expect("should have while")
     }
 }
 
@@ -357,6 +388,15 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
                 AstNode::Stmt(Stmt::IfElseStmt(_, _, _)) => {
                     generator.push_if_else();
                 }
+                AstNode::Stmt(Stmt::WhileStmt(_, _)) => {
+                    generator.push_while();
+                    let (entry_block, _, _) = generator.current_while();
+                    let jump = generator.new_value().jump(entry_block);
+                    generator.extend([jump]);
+
+                    generator.pop_block();
+                    generator.push_block(entry_block);
+                }
                 AstNode::ThenStmt(_) => {
                     let (then_block, _, _) = generator.current_if_else_then();
                     generator.push_block(then_block);
@@ -403,6 +443,9 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
                     Stmt::IfElseStmt(_, _, _) => {
                         generator.pop_if_else();
                     }
+                    Stmt::WhileStmt(_, _) => {
+                        generator.pop_while();
+                    }
                 },
 
                 AstNode::IfCond(_) => {
@@ -427,6 +470,26 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
                     let current_end_block = generator.current_block();
                     let jump = generator.new_value().jump(current_end_block);
                     generator.extend_to_specified_block(else_block, [jump]);
+                }
+
+                AstNode::WhileCond(_) => {
+                    let cond_exp = generator.pop_return_value();
+                    let (_, body_block, end_block) = generator.current_while();
+                    let br = generator
+                        .new_value()
+                        .branch(cond_exp, body_block, end_block);
+                    generator.extend([br]);
+
+                    _ = generator.pop_block();
+                    generator.push_block(body_block);
+                }
+                AstNode::WhileBody(_) => {
+                    let (while_entry, _, end_block) = generator.current_while();
+                    let jump = generator.new_value().jump(while_entry);
+                    generator.extend([jump]);
+
+                    _ = generator.pop_block();
+                    generator.push_block(end_block);
                 }
 
                 AstNode::VarDef(var_def) => match var_def {

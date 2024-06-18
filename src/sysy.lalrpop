@@ -93,6 +93,8 @@ UnmatchedIfStmt: Stmt = {
   
   "if" "(" <exp: Exp> ")" <stmt: MatchedStmt> "else" <stmt2: UnmatchedIfStmt> => 
     Stmt::IfElseStmt ( IfCond{exp: exp}, ThenStmt{stmt: Box::new(stmt)}, Some(ElseStmt{stmt: Box::new(stmt2)}) ),
+
+  "while" "(" <exp: Exp> ")" <stmt: UnmatchedIfStmt> => Stmt::WhileStmt ( WhileCond{0: exp}, WhileBody{0: Box::new(stmt)} ),
 }
 
 MatchedStmt: Stmt = {
@@ -100,6 +102,8 @@ MatchedStmt: Stmt = {
   <exp: Exp?> ";" => Stmt::ExpStmt ( <> ),
   <block: Block> => Stmt::BlockStmt ( <> ),
   "return" <exp: Exp> ";" => Stmt::ReturnExp ( <> ),
+  "while" "(" <exp: Exp> ")" <stmt: MatchedStmt> => Stmt::WhileStmt ( WhileCond{0: exp}, WhileBody{0: Box::new(stmt)} ),
+
   "if" "(" <exp: Exp> ")" <stmt1: MatchedStmt> "else" <stmt2: MatchedStmt> => 
     Stmt::IfElseStmt ( IfCond{exp: exp}, ThenStmt{stmt: Box::new(stmt1)}, Some(ElseStmt{stmt: Box::new(stmt2)}) ),
 }

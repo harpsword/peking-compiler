@@ -24,6 +24,7 @@ Stmt      ::= LVal "=" Exp ";"
     | "return" Exp ";";
     | "if" "(" Exp ")" Stmt "else" Stmt;
     | "if" "(" Exp ")" Stmt;
+    | "while" "(" Exp ")" Stmt;
 
 
 # -------- Expr part -----------

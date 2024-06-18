@@ -1,4 +1,5 @@
 use crate::ir_enhance::ir_builder::*;
+use koopa::front::ast::Ast;
 use koopa::ir::{builder_traits::*, *};
 use log::info;
 
@@ -20,6 +21,9 @@ pub enum AstNode<'a> {
     IfCond(&'a IfCond),
     ThenStmt(&'a ThenStmt),
     ElseStmt(&'a ElseStmt),
+
+    WhileCond(&'a WhileCond),
+    WhileBody(&'a WhileBody),
 
     ConstDecl(&'a ConstDecl),
     BType(&'a BType),
@@ -59,6 +63,9 @@ impl AstNode<'_> {
             AstNode::ThenStmt(_) => AstNodeKind::ThenStmt,
             AstNode::ElseStmt(_) => AstNodeKind::ElseStmt,
 
+            AstNode::WhileCond(_) => AstNodeKind::WhileCond,
+            AstNode::WhileBody(_) => AstNodeKind::WhileBody,
+
             AstNode::ConstDecl(_) => AstNodeKind::ConstDecl,
             AstNode::BType(_) => AstNodeKind::BType,
             AstNode::ConstDef(_) => AstNodeKind::ConstDef,
@@ -97,6 +104,8 @@ pub enum AstNodeKind {
     IfCond,
     ThenStmt,
     ElseStmt,
+    WhileCond,
+    WhileBody,
 
     ConstDecl,
     BType,
@@ -236,6 +245,7 @@ pub enum Stmt {
     ReturnExp(Box<Exp>),
 
     IfElseStmt(IfCond, ThenStmt, Option<ElseStmt>),
+    WhileStmt(WhileCond, WhileBody),
 }
 
 impl Traversal for Stmt {
@@ -263,6 +273,10 @@ impl Traversal for Stmt {
                 if let Some(else_stmt) = else_stmt {
                     else_stmt.traversal(sink);
                 }
+            }
+            Stmt::WhileStmt(cond, body) => {
+                cond.traversal(sink);
+                body.traversal(sink);
             }
         }
         sink(&TraversalStep::Leave(AstNode::Stmt(self)));
@@ -305,5 +319,27 @@ impl Traversal for ElseStmt {
         sink(&TraversalStep::Enter(AstNode::ElseStmt(self)));
         self.stmt.traversal(sink);
         sink(&TraversalStep::Leave(AstNode::ElseStmt(self)));
+    }
+}
+
+#[derive(Debug)]
+pub struct WhileCond(pub Box<Exp>);
+
+impl Traversal for WhileCond {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        sink(&TraversalStep::Enter(AstNode::WhileCond(self)));
+        self.0.traversal(sink);
+        sink(&TraversalStep::Leave(AstNode::WhileCond(self)));
+    }
+}
+
+#[derive(Debug)]
+pub struct WhileBody(pub Box<Stmt>);
+
+impl Traversal for WhileBody {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        sink(&TraversalStep::Enter(AstNode::WhileBody(self)));
+        self.0.traversal(sink);
+        sink(&TraversalStep::Leave(AstNode::WhileBody(self)));
     }
 }
