@@ -441,7 +441,7 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
                     Stmt::ExpStmt(_) => {}
                     Stmt::BlockStmt(_) => {}
                     Stmt::ContinueStmt => {
-                        if !generator.ast_kind_stack_check_last(AstNodeKind::WhileBody) {
+                        if !generator.ast_kind_stack_has(AstNodeKind::WhileBody) {
                             panic!("continue should in while body");
                         }
                         let (entry_block, _, _) = generator.current_while();
@@ -449,7 +449,7 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
                         generator.extend([jump]);
                     }
                     Stmt::BreakStmt => {
-                        if !generator.ast_kind_stack_check_last(AstNodeKind::WhileBody) {
+                        if !generator.ast_kind_stack_has(AstNodeKind::WhileBody) {
                             panic!("break should in while body");
                         }
                         let (_, _, end_block) = generator.current_while();
