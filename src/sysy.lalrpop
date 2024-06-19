@@ -102,6 +102,9 @@ MatchedStmt: Stmt = {
   <exp: Exp?> ";" => Stmt::ExpStmt ( <> ),
   <block: Block> => Stmt::BlockStmt ( <> ),
   "return" <exp: Exp> ";" => Stmt::ReturnExp ( <> ),
+  "break" ";" => Stmt::BreakStmt,
+  "continue" ";" => Stmt::ContinueStmt,
+
   "while" "(" <exp: Exp> ")" <stmt: MatchedStmt> => Stmt::WhileStmt ( WhileCond{0: exp}, WhileBody{0: Box::new(stmt)} ),
 
   "if" "(" <exp: Exp> ")" <stmt1: MatchedStmt> "else" <stmt2: MatchedStmt> => 

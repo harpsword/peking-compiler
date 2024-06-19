@@ -1,5 +1,5 @@
 use core::panic;
-use std::mem;
+use std::{mem, thread::panicking};
 
 use expr::{AddExp, EqExp, LAndExp, LOrExp, MulExp, PrimaryExp, RelExp, UnaryExp};
 use koopa::ir::{
@@ -440,6 +440,22 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
                     }
                     Stmt::ExpStmt(_) => {}
                     Stmt::BlockStmt(_) => {}
+                    Stmt::ContinueStmt => {
+                        if !generator.ast_kind_stack_check_last(AstNodeKind::WhileBody) {
+                            panic!("continue should in while body");
+                        }
+                        let (entry_block, _, _) = generator.current_while();
+                        let jump = generator.new_value().jump(entry_block);
+                        generator.extend([jump]);
+                    }
+                    Stmt::BreakStmt => {
+                        if !generator.ast_kind_stack_check_last(AstNodeKind::WhileBody) {
+                            panic!("break should in while body");
+                        }
+                        let (_, _, end_block) = generator.current_while();
+                        let jump = generator.new_value().jump(end_block);
+                        generator.extend([jump]);
+                    }
                     Stmt::IfElseStmt(_, _, _) => {
                         generator.pop_if_else();
                     }

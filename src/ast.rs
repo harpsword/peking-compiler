@@ -243,6 +243,8 @@ pub enum Stmt {
     ExpStmt(Option<Box<Exp>>),
     BlockStmt(Block),
     ReturnExp(Box<Exp>),
+    BreakStmt,
+    ContinueStmt,
 
     IfElseStmt(IfCond, ThenStmt, Option<ElseStmt>),
     WhileStmt(WhileCond, WhileBody),
@@ -267,6 +269,7 @@ impl Traversal for Stmt {
             Stmt::BlockStmt(block) => {
                 block.traversal(sink);
             }
+            Stmt::BreakStmt | Stmt::ContinueStmt => {}
             Stmt::IfElseStmt(exp, then_stmt, else_stmt) => {
                 exp.traversal(sink);
                 then_stmt.traversal(sink);
