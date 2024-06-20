@@ -15,10 +15,10 @@ match {
 }
 
 Comma<T>: Vec<T> = {
-  <mut v:(<T> ",")*> <e: T> => match e {
+  <e: T?> <mut v:("," <T>)*> => match e {
     None => v,
     Some(e) => {
-      v.push(e);
+      v.insert(0, e);
       v
     }
   }
@@ -26,15 +26,20 @@ Comma<T>: Vec<T> = {
 
 // 定义 CompUnit, 其返回值类型为 String
 // parser 在解析完成后的行为是返回 FuncDef 的值
-pub CompUnit: CompUnit = <func_def: FuncDef> => CompUnit { <> };
-
-FuncDef: FuncDef = {
-  <func_type: FuncType> <ident: Ident> "(" ")" <block: Block> => {
-    FuncDef { <> }
-  }
+pub CompUnit: CompUnit = {
+  <func_defs: FuncDef*> => CompUnit { <> },
 }
 
-FuncType: FuncType = "int" => FuncType::Int;
+FuncDef: FuncDef = {
+  <func_type: FuncType> <ident: Ident> "(" <func_f_params: Comma<FuncFParam>> ")" <block: Block> => FuncDef { func_type, ident, func_f_params, block },
+}
+
+FuncType: FuncType = {
+  "int" => FuncType::Int,
+  "void" => FuncType::Void,
+};
+
+FuncFParam: FuncFParam = <b_type: BType> <ident: Ident> => FuncFParam { b_type, ident };
 
 Block: Block = "{" <block_items: BlockItem*> "}" => Block { <> };
 
@@ -51,6 +56,7 @@ Decl: Decl = {
 
 BType: BType = "int" => BType::Int;
 
+// TODO use Comma to opt
 ConstDecl: ConstDecl = {
   "const" <b_type: BType> <const_def: ConstDef> <mut const_defs:("," <ConstDef>)*> ";" => {
     const_defs.insert(0, const_def);
@@ -63,6 +69,7 @@ ConstDef: ConstDef = <ident: Ident> "=" <const_init_val: ConstInitVal> => {
 ConstInitVal: ConstInitVal = <const_exp: ConstExp> => ConstInitVal { const_exp };
 ConstExp: ConstExp = <exp: Exp> => ConstExp { exp };
 
+// TODO use Comma to opt
 VarDecl: VarDecl = {
   <b_type: BType> <var_def: VarDef> <mut var_defs:("," <VarDef>)*> ";" => {
     var_defs.insert(0, var_def);
@@ -175,6 +182,11 @@ UnaryExp: Box<UnaryExp> = {
   <unary_op: UnaryOp> <unary_exp: UnaryExp> => {
     Box::new(UnaryExp::UnaryOpAndExp(<>))
   },
+  <func_call: FuncCall> => Box::new(UnaryExp::FuncCall(<>)),
+}
+
+FuncCall: Box<FuncCall> = {
+  <ident: Ident> "(" <args: Comma<Exp>> ")" => Box::new(FuncCall{ident, args}),
 }
 
 PrimaryExp: Box<PrimaryExp> = {

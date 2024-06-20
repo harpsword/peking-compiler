@@ -12,6 +12,7 @@ pub mod expr;
 pub enum AstNode<'a> {
     CompUnit(&'a CompUnit),
     FuncDef(&'a FuncDef),
+    FuncFParam(&'a FuncFParam),
 
     Block(&'a Block),
     BlockItem(&'a BlockItem),
@@ -43,6 +44,7 @@ pub enum AstNode<'a> {
     AddExp(&'a AddExp),
     MulExp(&'a MulExp),
     UnaryExp(&'a UnaryExp),
+    FuncCall(&'a FuncCall),
     PrimaryExp(&'a PrimaryExp),
     LVal(&'a LVal),
     Number(&'a i32),
@@ -53,6 +55,8 @@ impl AstNode<'_> {
         match self {
             AstNode::CompUnit(_) => AstNodeKind::CompUnit,
             AstNode::FuncDef(_) => AstNodeKind::FuncDef,
+
+            AstNode::FuncFParam(_) => AstNodeKind::FuncFParam,
 
             AstNode::Block(_) => AstNodeKind::Block,
             AstNode::BlockItem(_) => AstNodeKind::BlockItem,
@@ -84,6 +88,7 @@ impl AstNode<'_> {
             AstNode::AddExp(_) => AstNodeKind::AddExp,
             AstNode::MulExp(_) => AstNodeKind::MulExp,
             AstNode::UnaryExp(_) => AstNodeKind::UnaryExp,
+            AstNode::FuncCall(_) => AstNodeKind::FuncCall,
             AstNode::PrimaryExp(_) => AstNodeKind::PrimaryExp,
             AstNode::LVal(_) => AstNodeKind::LVal,
             AstNode::Number(_) => AstNodeKind::Number,
@@ -95,6 +100,7 @@ impl AstNode<'_> {
 pub enum AstNodeKind {
     CompUnit,
     FuncDef,
+    FuncFParam,
 
     Block,
     BlockItem,
@@ -125,6 +131,7 @@ pub enum AstNodeKind {
     AddExp,
     MulExp,
     UnaryExp,
+    FuncCall,
     PrimaryExp,
     LVal,
     Number,
@@ -160,13 +167,15 @@ pub trait Traversal {
 
 #[derive(Debug)]
 pub struct CompUnit {
-    pub func_def: FuncDef,
+    pub func_defs: Vec<FuncDef>,
 }
 
 impl Traversal for CompUnit {
     fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::CompUnit(self)));
-        self.func_def.traversal(sink);
+        for func_def in self.func_defs.iter() {
+            func_def.traversal(sink);
+        }
         sink(&TraversalStep::Leave(AstNode::CompUnit(self)));
     }
 }
@@ -175,20 +184,38 @@ impl Traversal for CompUnit {
 pub struct FuncDef {
     pub func_type: FuncType,
     pub ident: String,
+    pub func_f_params: Vec<FuncFParam>,
     pub block: Block,
 }
 
 impl Traversal for FuncDef {
     fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::FuncDef(self)));
+        for func_f_param in self.func_f_params.iter() {
+            func_f_param.traversal(sink);
+        }
         self.block.traversal(sink);
         sink(&TraversalStep::Leave(AstNode::FuncDef(self)));
     }
 }
 
 #[derive(Debug)]
+pub struct FuncFParam {
+    pub b_type: BType,
+    pub ident: String,
+}
+
+impl Traversal for FuncFParam {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        sink(&TraversalStep::Enter(AstNode::FuncFParam(self)));
+        sink(&TraversalStep::Leave(AstNode::FuncFParam(self)));
+    }
+}
+
+#[derive(Debug)]
 pub enum FuncType {
     Int,
+    Void,
 }
 
 #[derive(Debug)]

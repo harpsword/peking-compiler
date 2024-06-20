@@ -216,6 +216,7 @@ pub enum UnaryOp {
 pub enum UnaryExp {
     PrimaryExp(Box<PrimaryExp>),
     UnaryOpAndExp(UnaryOp, Box<UnaryExp>),
+    FuncCall(Box<FuncCall>),
 }
 
 impl Traversal for UnaryExp {
@@ -226,8 +227,25 @@ impl Traversal for UnaryExp {
             UnaryExp::UnaryOpAndExp(op, exp) => {
                 exp.traversal(sink);
             }
+            UnaryExp::FuncCall(func_call) => func_call.traversal(sink),
         }
         sink(&TraversalStep::Leave(AstNode::UnaryExp(self)));
+    }
+}
+
+#[derive(Debug)]
+pub struct FuncCall {
+    pub ident: String,
+    pub args: Vec<Box<Exp>>,
+}
+
+impl Traversal for FuncCall {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        sink(&TraversalStep::Enter(AstNode::FuncCall(self)));
+        for arg in self.args.iter() {
+            arg.traversal(sink);
+        }
+        sink(&TraversalStep::Leave(AstNode::FuncCall(self)));
     }
 }
 
