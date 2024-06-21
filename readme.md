@@ -54,3 +54,11 @@ binaryOp
 6. `<`
 7. `>=`
 8. `<=`
+
+
+# TODO
+
+1. lv8-part1
+   1. done, function call
+   2. done, load func parameter, and register it.
+   3. done, void function without return, add 'ret'

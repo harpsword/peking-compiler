@@ -185,7 +185,7 @@ impl RiscvGenerator {
 
         // deal with other instructions
         for (bb, node) in func_data.layout().bbs() {
-            let bb_name = tools::get_bb_name(func_data, *bb);
+            let bb_name = tools::from_ir_name(func_data, *bb);
             if let Some(bb_name) = bb_name {
                 self.result.append(format!("{}:", bb_name));
             }
@@ -402,9 +402,9 @@ impl RiscvGenerator {
                 let cond = self.load_value(func, branch.cond(), true);
 
                 let then_bb =
-                    tools::get_bb_name(func, branch.true_bb()).expect("then bb should have name");
+                    tools::from_ir_name(func, branch.true_bb()).expect("then bb should have name");
                 let else_bb =
-                    tools::get_bb_name(func, branch.false_bb()).expect("else bb should have name");
+                    tools::from_ir_name(func, branch.false_bb()).expect("else bb should have name");
 
                 self.result.append(Instruction::Bnez(&cond, then_bb));
                 self.result.append(Instruction::Jump(else_bb));
@@ -413,7 +413,7 @@ impl RiscvGenerator {
                 None
             }
             ValueKind::Jump(jump) => {
-                let target_bb = tools::get_bb_name(func, jump.target())
+                let target_bb = tools::from_ir_name(func, jump.target())
                     .expect("jump target bb should have name");
                 self.result.append(Instruction::Jump(target_bb));
 
@@ -434,10 +434,10 @@ impl RiscvGenerator {
     }
 }
 
-mod tools {
+pub(crate) mod tools {
     use koopa::ir::{BasicBlock, FunctionData};
 
-    pub(crate) fn get_bb_name(func: &FunctionData, bb: BasicBlock) -> Option<&str> {
+    pub(crate) fn from_ir_name(func: &FunctionData, bb: BasicBlock) -> Option<&str> {
         let name = func.dfg().bb(bb).name().as_ref();
         if let Some(name) = name {
             if name.starts_with("@") {
@@ -446,5 +446,9 @@ mod tools {
             return Some(&name);
         }
         None
+    }
+
+    pub(crate) fn turn_into_ir_name(name: &str) -> String {
+        format!("@{}", name)
     }
 }

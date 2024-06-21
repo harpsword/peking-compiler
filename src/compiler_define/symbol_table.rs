@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 
-use koopa::ir::Value;
+use koopa::ir::{Function, Value};
 
 #[derive(Debug, Clone)]
 pub enum Symbol {
     Const(i32),
     Var(Value),
+    Func(Function),
+    FuncParam(Value),
 }
 
 #[derive(Debug)]
@@ -18,6 +20,14 @@ impl SymbolTable {
         Self {
             symbol_table: HashMap::new(),
         }
+    }
+
+    pub(crate) fn insert_symbol(&mut self, name: String, symbol: Symbol) -> Option<Symbol> {
+        self.symbol_table.insert(name, symbol)
+    }
+
+    pub(crate) fn get(&self, name: &str) -> Option<&Symbol> {
+        self.symbol_table.get(name)
     }
 
     pub(crate) fn get_symbol(&self, name: &str) -> Option<&Symbol> {

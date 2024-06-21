@@ -199,10 +199,16 @@ impl Traversal for FuncDef {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FuncFParam {
     pub b_type: BType,
     pub ident: String,
+}
+
+impl Into<(Option<String>, Type)> for FuncFParam {
+    fn into(self) -> (Option<String>, Type) {
+        (Some("@".to_owned() + &self.ident), self.b_type.into())
+    }
 }
 
 impl Traversal for FuncFParam {
@@ -212,10 +218,19 @@ impl Traversal for FuncFParam {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum FuncType {
     Int,
     Void,
+}
+
+impl Into<Type> for FuncType {
+    fn into(self) -> Type {
+        match self {
+            FuncType::Int => Type::get_i32(),
+            FuncType::Void => Type::get_unit(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -241,10 +256,12 @@ pub enum BlockItem {
 
 impl Traversal for BlockItem {
     fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        sink(&TraversalStep::Enter(AstNode::BlockItem(self)));
         match self {
             BlockItem::Stmt(stmt) => stmt.traversal(sink),
             BlockItem::Decl(decl) => decl.traversal(sink),
         }
+        sink(&TraversalStep::Leave(AstNode::BlockItem(self)));
     }
 }
 

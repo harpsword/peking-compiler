@@ -7,16 +7,26 @@ use koopa::ir::{
     BasicBlock, BinaryOp, Function, FunctionData, Program, Type, Value,
 };
 
-use crate::ast::{self, *};
+use crate::{
+    ast::{self, *},
+    ir_enhance::tools,
+};
 
 use super::{
     semantic_analysis,
-    symbol_table::{self, SymbolTable},
+    symbol_table::{self, Symbol, SymbolTable},
 };
+
+struct IRFunc {
+    function: Function,
+    has_return: bool,
+}
 
 struct IRGenerator {
     program: Program,
-    function: Option<Function>,
+    // only in, not out
+    // current one is last one
+    functions: Vec<IRFunc>,
     // first in, last out
     // the last one is current block
     blocks: Vec<BasicBlock>,
@@ -27,6 +37,8 @@ struct IRGenerator {
     // when exit a symbol table, pop it
     // when search a symbol, start from the tail
     symbol_tables: Vec<SymbolTable>,
+    // contains global symbol, like func name
+    global_symbol_table: SymbolTable,
 
     // for if elsed
     // contains: (then_block, else_block, end_block)
@@ -42,12 +54,14 @@ impl IRGenerator {
     fn new() -> Self {
         Self {
             program: Program::new(),
-            function: Option::None,
+            functions: Vec::new(),
             blocks: Vec::new(),
             return_values: Vec::new(),
             ast_node_kind_stack: Vec::new(),
 
             symbol_tables: vec![SymbolTable::new()],
+            global_symbol_table: SymbolTable::new(),
+
             if_else_then_count: 0,
             if_else_then_stack: Vec::new(),
 
@@ -103,6 +117,21 @@ impl IRGenerator {
         None
     }
 
+    fn update_symbol(&mut self, name: String, symbol: Symbol) -> Option<Symbol> {
+        for symbol_table in self.symbol_tables.iter_mut().rev() {
+            let has_symbol = symbol_table.get_symbol(&name).is_some();
+            if has_symbol {
+                let old_symbol = symbol_table.insert_symbol(name, symbol).unwrap();
+                return Some(old_symbol);
+            }
+        }
+        None
+    }
+
+    fn insert_symbol(&mut self, name: String, symbol: Symbol) {
+        self.current_symbol_table().insert_symbol(name, symbol);
+    }
+
     fn insert_const(&mut self, name: String, value: i32) {
         self.current_symbol_table().insert_const(name, value);
     }
@@ -117,6 +146,7 @@ impl IRGenerator {
     }
 
     fn insert_var(&mut self, name: String, value: Value) {
+        // duplicate var check
         self.current_symbol_table().insert_var(name, value);
     }
 
@@ -141,6 +171,10 @@ impl IRGenerator {
 
     fn append_return_value(&mut self, value: Value) {
         self.return_values.push(value);
+    }
+
+    fn clean_return_value(&mut self) {
+        self.return_values.clear();
     }
 }
 
@@ -193,19 +227,36 @@ impl IRGenerator {
     }
 }
 
-/// Adapt to the koopa IR
+/// for function
 impl IRGenerator {
-    fn func_data(&mut self) -> &mut FunctionData {
-        self.program
-            .func_mut(self.function.expect("function not found"))
+    fn current_func_data(&mut self) -> &mut FunctionData {
+        let function = self.functions.last().expect("function not found");
+
+        self.program.func_mut(function.function)
+    }
+
+    fn current_ir_func(&mut self) -> &mut IRFunc {
+        self.functions.last_mut().expect("function not found")
     }
 
     fn new_function(&mut self, func_data: FunctionData) {
-        self.function = Some(self.program.new_func(func_data));
-    }
+        let func_name = func_data.name().to_string();
+        let func = self.program.new_func(func_data);
 
+        self.global_symbol_table
+            .insert_symbol(func_name, Symbol::Func(func));
+        let ir_func = IRFunc {
+            function: func,
+            has_return: false,
+        };
+        self.functions.push(ir_func);
+    }
+}
+
+/// Adapt to the koopa IR
+impl IRGenerator {
     fn new_block(&mut self, name: Option<String>) -> BasicBlock {
-        let func_data = self.func_data();
+        let func_data = self.current_func_data();
         let bb = func_data.dfg_mut().new_bb().basic_block(name);
         let _ = func_data.layout_mut().bbs_mut().push_key_back(bb);
         bb
@@ -231,7 +282,7 @@ impl IRGenerator {
 
     fn extend<I: IntoIterator<Item = Value>>(&mut self, iter: I) {
         let bb = self.current_block();
-        self.func_data()
+        self.current_func_data()
             .layout_mut()
             .bb_mut(bb)
             .insts_mut()
@@ -243,7 +294,7 @@ impl IRGenerator {
         bb: BasicBlock,
         iter: I,
     ) {
-        self.func_data()
+        self.current_func_data()
             .layout_mut()
             .bb_mut(bb)
             .insts_mut()
@@ -251,7 +302,7 @@ impl IRGenerator {
     }
 
     fn new_value(&mut self) -> LocalBuilder {
-        self.func_data().dfg_mut().new_value()
+        self.current_func_data().dfg_mut().new_value()
     }
 }
 
@@ -327,6 +378,31 @@ fn exp_ir_generate(generator: &mut IRGenerator, ast: &AstNode) {
                     generator.append_return_value(not);
                 }
             },
+            UnaryExp::FuncCall(func_call) => {
+                let mut args: Vec<_> = generator
+                    .return_values
+                    .iter()
+                    .take(func_call.args.len())
+                    .map(|x| x.clone())
+                    .collect();
+                let func_name = tools::turn_into_ir_name(&func_call.ident);
+                let function = match generator
+                    .global_symbol_table
+                    .get_symbol(&func_name)
+                    .expect("function not found")
+                    .clone()
+                {
+                    Symbol::Func(function) => function,
+                    _ => unreachable!("function not found"),
+                };
+                args.reverse();
+                // TODO
+                let call = generator.new_value().call(function, args);
+
+                generator.extend([call]);
+
+                generator.append_return_value(call);
+            }
             _ => {}
         },
         AstNode::PrimaryExp(_) => {}
@@ -342,12 +418,25 @@ fn exp_ir_generate(generator: &mut IRGenerator, ast: &AstNode) {
                     .expect(format!("should define {}", name.ident).as_str())
                     .clone();
                 let value = match symbol {
-                    super::symbol_table::Symbol::Const(value) => {
-                        generator.new_value().integer(value)
-                    }
-                    super::symbol_table::Symbol::Var(variable) => {
+                    symbol_table::Symbol::Const(value) => generator.new_value().integer(value),
+                    symbol_table::Symbol::Var(variable) => {
                         let load = generator.new_value().load(variable);
                         generator.extend([load]);
+                        load
+                    }
+                    symbol_table::Symbol::Func(_) => {
+                        unreachable!("cannot use func in expression except function call")
+                    }
+                    Symbol::FuncParam(func_param) => {
+                        // for func param, need to alloc a variable
+                        // then load data from func_param to this variable
+                        let alloc = generator.new_value().alloc(Type::get_i32());
+                        let store = generator.new_value().store(func_param, alloc);
+                        // update the symbol table
+                        generator.update_symbol(name.ident.clone(), Symbol::Var(alloc));
+
+                        let load = generator.new_value().load(alloc);
+                        generator.extend([alloc, store, load]);
                         load
                     }
                 };
@@ -367,17 +456,36 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
             generator.append_ast_kind(enter.get_kind());
             match enter {
                 AstNode::FuncDef(func_def) => {
+                    // TODO add @ for param name
+                    let params: Vec<(Option<String>, Type)> = func_def
+                        .func_f_params
+                        .iter()
+                        .map(|x| x.clone().into())
+                        .collect();
+
                     let func_data = FunctionData::with_param_names(
                         "@".to_owned() + &func_def.ident,
-                        vec![],
-                        Type::get_i32(),
+                        params,
+                        func_def.func_type.clone().into(),
                     );
+
+                    generator.new_current_symbol_table();
+                    for (param, value) in func_def.func_f_params.iter().zip(func_data.params()) {
+                        generator.insert_symbol(param.ident.to_owned(), Symbol::FuncParam(*value));
+                    }
 
                     generator.new_function(func_data);
                     generator.new_block_and_append(Some("@entry".to_owned()));
+
+                    // let func_data = generator.current_func_data();
+                    // let param_value: Vec<(String, Value)> = func_def.func_f_params.iter().zip(func_data.params()).map(|(param, value)| {
+
+                    //     (param.ident.clone(), *value)
+                    // });
                 }
                 AstNode::Block(_) => {
-                    generator.new_current_symbol_table();
+                    // TODO, need to delete
+                    // generator.new_current_symbol_table();
                 }
                 AstNode::ConstDecl(const_decl) => {
                     semantic_analysis::const_calculate(
@@ -415,24 +523,47 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
         if let TraversalStep::Leave(leave) = s {
             generator.pop_ast_kind();
             match leave {
+                AstNode::FuncDef(_) => {
+                    if !generator.current_ir_func().has_return {
+                        let ret = generator.new_value().ret(None);
+                        generator.extend([ret]);
+                    }
+                }
+                AstNode::BlockItem(_) => {
+                    // TODO, need to make sure
+                    // need to clean return value
+                    generator.clean_return_value();
+                }
                 AstNode::Stmt(stmt) => match stmt {
                     Stmt::ReturnExp(_) => {
                         let return_value = generator.pop_return_value_option();
                         let ret = generator.new_value().ret(return_value);
                         generator.extend([ret]);
+                        generator.current_ir_func().has_return = true;
                     }
                     Stmt::AssignStmt(l_val, _) => {
                         let rhs = generator.pop_return_value();
 
                         let lhs_name = &l_val.ident;
-                        let symbol = generator
+                        let lhs_symbol = generator
                             .get_symbol(lhs_name)
-                            .expect(format!("should define {}", lhs_name).as_str());
-                        let dest = match symbol {
-                            super::symbol_table::Symbol::Const(_) => {
+                            .expect(format!("should define {}", lhs_name).as_str())
+                            .clone();
+                        let dest = match lhs_symbol {
+                            Symbol::Const(_) => {
                                 panic!("const cannot be modified");
                             }
-                            super::symbol_table::Symbol::Var(var) => var.clone(),
+                            Symbol::Var(var) => var.clone(),
+                            Symbol::Func(_) => unreachable!("function cannot be modified"),
+                            Symbol::FuncParam(func_param) => {
+                                // for func param, need to alloc a variable
+                                // then load data from func_param to this variable
+                                let alloc = generator.new_value().alloc(Type::get_i32());
+                                let store = generator.new_value().store(func_param, alloc);
+                                generator.extend([alloc, store]);
+                                generator.update_symbol(lhs_name.clone(), Symbol::Var(alloc));
+                                alloc
+                            }
                         };
 
                         let store = generator.new_value().store(rhs, dest);
