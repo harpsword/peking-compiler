@@ -58,7 +58,11 @@ binaryOp
 
 # TODO
 
-1. lv8-part1
+1. lv8-part1: ir generate
    1. done, function call
    2. done, load func parameter, and register it.
    3. done, void function without return, add 'ret'
+2. lv8-part1: riscv generate
+   1. done, stack calculation
+   2. new function def: need to deal with parameter reading
+   3. call function

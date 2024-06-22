@@ -11,9 +11,10 @@ impl RiskVCode {
         self.insts.push(inst.into());
     }
 
-    pub(crate) fn append_basic(&mut self) {
+    pub(crate) fn function_begin(&mut self, name: &str) {
         self.append("  .text");
-        self.append("  .global main");
+        self.append(format!("  .globl {}", name));
+        self.append(format!("{}:", name));
     }
 
     pub(crate) fn generate_result(self) -> String {
@@ -51,6 +52,7 @@ pub(crate) enum Instruction<'a> {
     Or(&'a str, &'a str, &'a str),
 
     Li(&'a str, i32),
+    /// Mov(dst, src)
     Mov(&'a str, &'a str),
 
     /// Sw(dst, src)
@@ -70,6 +72,9 @@ pub(crate) enum Instruction<'a> {
     /// j target
     /// Jump to target
     Jump(&'a str),
+
+    /// call func
+    Call(&'a str),
     Ret,
 }
 
@@ -102,6 +107,7 @@ impl<'a> Into<String> for Instruction<'a> {
 
             Instruction::Bnez(cond, target) => format!("  bnez {cond}, {target}"),
             Instruction::Jump(target) => format!("  j {target}"),
+            Instruction::Call(target) => format!("  call {target}"),
             Instruction::Ret => format!("  ret"),
         }
     }
