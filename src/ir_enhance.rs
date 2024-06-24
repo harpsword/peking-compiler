@@ -255,6 +255,10 @@ impl RiscvGenerator {
             }
         }
 
+        if self.result.last_inst_check(Instruction::Ret) {
+            // last one is ret, need to pop it and add epilogue first
+            _ = self.result.pop();
+        }
         // epilogue
         if calculation_result.need_save_ra {
             self.result
@@ -368,6 +372,7 @@ impl RiscvGenerator {
                         }
                     }
                 }
+                self.result.append(Instruction::Ret);
 
                 None
             }

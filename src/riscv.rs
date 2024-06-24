@@ -20,6 +20,14 @@ impl RiskVCode {
     pub(crate) fn generate_result(self) -> String {
         self.insts.join("\n")
     }
+
+    pub(crate) fn last_inst_check<V: Into<String>>(&self, inst: V) -> bool {
+        self.insts.last().map(|s| s.as_str()).map_or(false, |s| s == inst.into())
+    }
+
+    pub(crate) fn pop(&mut self) -> Option<String> {
+        self.insts.pop()
+    }
 }
 
 /// Instruction
