@@ -20,6 +20,7 @@ use super::{
 struct IRFunc {
     function: Function,
     has_return: bool,
+    parameters: Vec<(String, Value)>,
 }
 
 struct IRGenerator {
@@ -88,6 +89,12 @@ impl IRGenerator {
         self.ast_node_kind_stack
             .last()
             .map_or(false, |k| *k == kind)
+    }
+
+    /// last 1 means last one
+    fn ast_kind_stack_check_last_n(&self, n: usize, kind: AstNodeKind) -> bool {
+        let index = self.ast_node_kind_stack.len() - n ;
+        self.ast_node_kind_stack.get(index).map_or(false, |k| *k == kind)
     }
 }
 
@@ -239,7 +246,7 @@ impl IRGenerator {
         self.functions.last_mut().expect("function not found")
     }
 
-    fn new_function(&mut self, func_data: FunctionData) {
+    fn new_function(&mut self, func_data: FunctionData, params: Vec<(String, Value)>) {
         let func_name = func_data.name().to_string();
         let func = self.program.new_func(func_data);
 
@@ -248,6 +255,7 @@ impl IRGenerator {
         let ir_func = IRFunc {
             function: func,
             has_return: false,
+            parameters: params,
         };
         self.functions.push(ir_func);
     }
@@ -456,7 +464,6 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
             generator.append_ast_kind(enter.get_kind());
             match enter {
                 AstNode::FuncDef(func_def) => {
-                    // TODO add @ for param name
                     let params: Vec<(Option<String>, Type)> = func_def
                         .func_f_params
                         .iter()
@@ -468,24 +475,27 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
                         params,
                         func_def.func_type.clone().into(),
                     );
-
-                    generator.new_current_symbol_table();
+                    let mut parameters = Vec::new();
                     for (param, value) in func_def.func_f_params.iter().zip(func_data.params()) {
-                        generator.insert_symbol(param.ident.to_owned(), Symbol::FuncParam(*value));
+                        parameters.push((param.ident.to_owned(), value.clone()));
                     }
+                    generator.new_function(func_data, parameters);
 
-                    generator.new_function(func_data);
                     generator.new_block_and_append(Some("@entry".to_owned()));
-
-                    // let func_data = generator.current_func_data();
-                    // let param_value: Vec<(String, Value)> = func_def.func_f_params.iter().zip(func_data.params()).map(|(param, value)| {
-
-                    //     (param.ident.clone(), *value)
-                    // });
                 }
                 AstNode::Block(_) => {
-                    // TODO, need to delete
-                    // generator.new_current_symbol_table();
+                    generator.new_current_symbol_table();
+                    if generator.ast_kind_stack_check_last_n(2, AstNodeKind::FuncDef) {
+                        // for func def, need to add parameter to symbol table
+                        let mut param_vector = Vec::new();
+                        for (param, value) in generator.current_ir_func().parameters.iter() {
+                            param_vector.push((param.clone(), value.clone()));
+                        }
+
+                        while let Some((param, value)) = param_vector.pop() {
+                            generator.insert_symbol(param, Symbol::FuncParam(value));
+                        }
+                    }
                 }
                 AstNode::ConstDecl(const_decl) => {
                     semantic_analysis::const_calculate(
