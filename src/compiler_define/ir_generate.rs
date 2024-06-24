@@ -1,7 +1,6 @@
 use core::panic;
-use std::{mem, thread::panicking};
 
-use expr::{AddExp, EqExp, LAndExp, LOrExp, MulExp, PrimaryExp, RelExp, UnaryExp};
+use expr::{AddExp, EqExp, LAndExp, LOrExp, MulExp, RelExp, UnaryExp};
 use koopa::ir::{
     builder::{BasicBlockBuilder, LocalBuilder, LocalInstBuilder, ValueBuilder},
     BasicBlock, BinaryOp, Function, FunctionData, Program, Type, Value,
@@ -99,31 +98,41 @@ impl IRGenerator {
 
     /// last 1 means last one
     fn ast_kind_stack_check_last_n(&self, n: usize, kind: AstNodeKind) -> bool {
-        let index = self.ast_node_kind_stack.len() - n ;
-        self.ast_node_kind_stack.get(index).map_or(false, |k| *k == kind)
+        let index = self.ast_node_kind_stack.len() - n;
+        self.ast_node_kind_stack
+            .get(index)
+            .map_or(false, |k| *k == kind)
     }
 
     fn add_library_function(&mut self) {
         let get_int = FunctionData::new_decl("@getint".to_owned(), Vec::new(), Type::get_i32());
         let get_ch = FunctionData::new_decl("@getch".to_owned(), Vec::new(), Type::get_i32());
-        let get_array = FunctionData::new_decl("@getarray".to_owned(), vec![Type::get_pointer(Type::get_i32())], Type::get_i32());
+        let get_array = FunctionData::new_decl(
+            "@getarray".to_owned(),
+            vec![Type::get_pointer(Type::get_i32())],
+            Type::get_i32(),
+        );
 
-        let put_int = FunctionData::new_decl("@putint".to_owned(), vec![Type::get_i32()], Type::get_unit());
-        let put_ch = FunctionData::new_decl("@putch".to_owned(), vec![Type::get_i32()], Type::get_unit());
-        let put_array = FunctionData::new_decl("@putarray".to_owned(), vec![Type::get_i32(), Type::get_pointer(Type::get_i32())], Type::get_unit());
+        let put_int = FunctionData::new_decl(
+            "@putint".to_owned(),
+            vec![Type::get_i32()],
+            Type::get_unit(),
+        );
+        let put_ch =
+            FunctionData::new_decl("@putch".to_owned(), vec![Type::get_i32()], Type::get_unit());
+        let put_array = FunctionData::new_decl(
+            "@putarray".to_owned(),
+            vec![Type::get_i32(), Type::get_pointer(Type::get_i32())],
+            Type::get_unit(),
+        );
 
-        let start_time = FunctionData::new_decl("@start_time".to_owned(), Vec::new(), Type::get_unit());
-        let stop_time = FunctionData::new_decl("@stop_time".to_owned(), Vec::new(), Type::get_unit());
+        let start_time =
+            FunctionData::new_decl("@start_time".to_owned(), Vec::new(), Type::get_unit());
+        let stop_time =
+            FunctionData::new_decl("@stop_time".to_owned(), Vec::new(), Type::get_unit());
 
         let func_datas = vec![
-            get_int,
-            get_ch,
-            get_array,
-            put_int,
-            put_ch,
-            put_array,
-            start_time,
-            stop_time,
+            get_int, get_ch, get_array, put_int, put_ch, put_array, start_time, stop_time,
         ];
         for func_data in func_datas {
             self.new_function(func_data, vec![], AddFuncType::Decl);
@@ -279,7 +288,12 @@ impl IRGenerator {
         self.functions.last_mut().expect("function not found")
     }
 
-    fn new_function(&mut self, func_data: FunctionData, params: Vec<(String, Value)>, add_func_type: AddFuncType) {
+    fn new_function(
+        &mut self,
+        func_data: FunctionData,
+        params: Vec<(String, Value)>,
+        add_func_type: AddFuncType,
+    ) {
         let func_name = func_data.name().to_string();
         let func = self.program.new_func(func_data);
 

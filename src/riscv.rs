@@ -22,7 +22,10 @@ impl RiskVCode {
     }
 
     pub(crate) fn last_inst_check<V: Into<String>>(&self, inst: V) -> bool {
-        self.insts.last().map(|s| s.as_str()).map_or(false, |s| s == inst.into())
+        self.insts
+            .last()
+            .map(|s| s.as_str())
+            .map_or(false, |s| s == inst.into())
     }
 
     pub(crate) fn pop(&mut self) -> Option<String> {

@@ -1,9 +1,6 @@
 use std::collections::HashMap;
 
-use koopa::ir::{
-    entities::BasicBlockData, layout::BasicBlockNode, values, BasicBlock, Function, FunctionData,
-    Program, TypeKind, Value, ValueKind,
-};
+use koopa::ir::{values, Function, FunctionData, Program, TypeKind, Value, ValueKind};
 use log::info;
 use once_cell::sync::Lazy;
 
@@ -179,6 +176,7 @@ impl RiscvGenerator {
     /// calculate the stack size of a function
     fn func_stack_size_calculation(
         &mut self,
+        program: &Program,
         func_data: &FunctionData,
     ) -> FuncStackSizeCalculationResult {
         let mut size = 0;
@@ -204,7 +202,13 @@ impl RiscvGenerator {
                             parameter_count_bigger_than_8 =
                                 std::cmp::max(param_counts - 8, parameter_count_bigger_than_8);
                         }
-                        // TODO need to add callee func return value's size
+
+                        let callee_func_data = program.func(call.callee());
+                        let return_value_size = match callee_func_data.ty().kind() {
+                            TypeKind::Function(_, ret) => ret.size(),
+                            _ => unreachable!(),
+                        };
+                        size = size + return_value_size;
                     }
                     _ => {}
                 }
@@ -231,7 +235,7 @@ impl RiscvGenerator {
         self.stack_manager.reset();
         self.result.function_begin(func_name);
 
-        let calculation_result = self.func_stack_size_calculation(func_data);
+        let calculation_result = self.func_stack_size_calculation(program, func_data);
         let size = calculation_result.stack_size;
         self.stack_manager.set_size(size);
         // assign parameter size first
@@ -546,22 +550,19 @@ impl RiscvGenerator {
 
                 // return value will also be placed on register and stack
                 // from a0-a7 and related stack space
-                // but now, only support one return value, so just return a0
-
-                // let call_result = {
-                //     if return_value_size > 0 {
-                //         let dst = self.stack_manager.assign(return_value_size).expect("should have stack space");
-                //         let dst = InstructionResult::Stack(dst);
-                //         self.result.append(Instruction::Sw(&dst.clone().to_string(), "a0"));
-                //         Some(dst)
-                //     } else {
-                //         None
-                //     }
-                // };
+                // but now, only support one return value
+                // so we will store it to stack from a0
 
                 let call_result = {
                     if return_value_size > 0 {
-                        Some(InstructionResult::Register("a0".to_owned()))
+                        let dst = self
+                            .stack_manager
+                            .assign(return_value_size)
+                            .expect("should have stack space");
+                        let dst = InstructionResult::Stack(dst);
+                        self.result
+                            .append(Instruction::Sw(&dst.clone().to_string(), "a0"));
+                        Some(dst)
                     } else {
                         None
                     }
