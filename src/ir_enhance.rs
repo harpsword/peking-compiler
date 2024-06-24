@@ -221,11 +221,14 @@ impl RiscvGenerator {
     }
 
     fn generate_riscv_for_func(&mut self, program: &Program, func: Function) {
-        self.stack_manager.reset();
-
         let func_data = program.func(func);
+        if func_data.layout().entry_bb().is_none() {
+            // decl function, just return
+            return;
+        }
 
         let func_name = Self::extract_func_name_from_koopa_func(func_data.name());
+        self.stack_manager.reset();
         self.result.function_begin(func_name);
 
         let calculation_result = self.func_stack_size_calculation(func_data);
