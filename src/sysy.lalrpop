@@ -14,24 +14,71 @@ match {
   _
 }
 
-Comma<T>: Vec<T> = {
-  <e: T?> <mut v:("," <T>)*> => match e {
-    None => v,
-    Some(e) => {
-      v.insert(0, e);
-      v
-    }
-  }
+// 定义 CompUnit, 其返回值类型为 String
+pub CompUnit: CompUnit = {
+  <comp_unit_items: (CompUnitItem)*> => CompUnit { items: comp_unit_items },
 }
 
-// 定义 CompUnit, 其返回值类型为 String
-// parser 在解析完成后的行为是返回 FuncDef 的值
-pub CompUnit: CompUnit = {
-  <func_defs: FuncDef*> => CompUnit { <> },
+CompUnitItem: CompUnitItem = {
+  <decl: Decl> => CompUnitItem::Decl(decl),
+  <func_def: FuncDef> => CompUnitItem::FuncDef(func_def),
 }
+
+// --------------- DECL START ----------------
+
+Decl: Decl = {
+  <const_decl: ConstDecl> => Decl::ConstDecl(const_decl),
+  <var_decl: VarDecl> => Decl::VarDecl(var_decl),
+}
+
+ConstDecl: ConstDecl = {
+  "const" "int" <const_def: ConstDef> <mut const_defs:("," <ConstDef>)*> ";" => {
+    const_defs.insert(0, const_def);
+    ConstDecl { b_type: BType::Int, const_defs: const_defs}
+  }
+};
+
+ConstDef: ConstDef = {
+  <ident: Ident> "=" <const_init_val: ConstInitVal> => {
+    ConstDef { ident, const_init_val }
+  }
+};
+
+ConstInitVal: ConstInitVal = {
+  <const_exp: ConstExp> => ConstInitVal { const_exp }
+};
+
+ConstExp: ConstExp = <exp: Exp> => ConstExp { exp };
+
+VarDecl: VarDecl = {
+  "int" <var_def: VarDef> <mut var_defs:("," <VarDef>)*> ";" => {
+    var_defs.insert(0, var_def);
+    let b_type = BType::Int;
+    VarDecl { b_type, var_defs }
+  }
+};
+
+VarDef: VarDef = {
+  <ident: Ident> => VarDef::IdentDefine(ident),
+  <ident: Ident> "=" <init_val: InitVal> => VarDef::IdentInitVal(ident, init_val),
+};
+
+InitVal: InitVal = <exp: Exp> => InitVal { exp };
+
+// ---------------- DECL END ----------------
 
 FuncDef: FuncDef = {
-  <func_type: FuncType> <ident: Ident> "(" <func_f_params: Comma<FuncFParam>> ")" <block: Block> => FuncDef { func_type, ident, func_f_params, block },
+  <head: FuncHead>  ")" <block: Block> => 
+    FuncDef { func_type: head.0, ident: head.1, func_f_params: Vec::new(), block: block },
+  <head: FuncHead> <param: FuncFParam> <mut func_f_params: ("," <FuncFParam>)*> ")" <block: Block> => {
+    func_f_params.insert(0, param);
+    FuncDef { func_type: head.0, ident: head.1, func_f_params: func_f_params, block: block }
+  },
+}
+
+FuncHead: (FuncType, String) = {
+  "void" <ident: Ident> "(" => (FuncType::Void, ident),
+  "int" <ident: Ident> "(" => (FuncType::Int, ident),
 }
 
 FuncType: FuncType = {
@@ -39,7 +86,12 @@ FuncType: FuncType = {
   "void" => FuncType::Void,
 };
 
-FuncFParam: FuncFParam = <b_type: BType> <ident: Ident> => FuncFParam { b_type, ident };
+FuncFParam: FuncFParam = {
+  "int" <ident: Ident> => {
+    let b_type = BType::Int;
+    FuncFParam { b_type, ident }
+  }
+};
 
 Block: Block = "{" <block_items: BlockItem*> "}" => Block { <> };
 
@@ -47,43 +99,6 @@ BlockItem: BlockItem = {
   <decl: Decl> => BlockItem::Decl(decl),
   <stmt: Stmt> => BlockItem::Stmt(stmt),
 };
-
-// --------------- DECL START ----------------
-Decl: Decl = {
-  <const_decl: ConstDecl> => Decl::ConstDecl(const_decl),
-  <var_decl: VarDecl> => Decl::VarDecl(var_decl),
-}
-
-BType: BType = "int" => BType::Int;
-
-// TODO use Comma to opt
-ConstDecl: ConstDecl = {
-  "const" <b_type: BType> <const_def: ConstDef> <mut const_defs:("," <ConstDef>)*> ";" => {
-    const_defs.insert(0, const_def);
-    ConstDecl { b_type, const_defs}
-  }
-};
-ConstDef: ConstDef = <ident: Ident> "=" <const_init_val: ConstInitVal> => {
-  ConstDef { ident, const_init_val }
-};
-ConstInitVal: ConstInitVal = <const_exp: ConstExp> => ConstInitVal { const_exp };
-ConstExp: ConstExp = <exp: Exp> => ConstExp { exp };
-
-// TODO use Comma to opt
-VarDecl: VarDecl = {
-  <b_type: BType> <var_def: VarDef> <mut var_defs:("," <VarDef>)*> ";" => {
-    var_defs.insert(0, var_def);
-    VarDecl { b_type, var_defs }
-  }
-};
-VarDef: VarDef = {
-  <ident: Ident> => VarDef::IdentDefine(ident),
-  <ident: Ident> "=" <init_val: InitVal> => VarDef::IdentInitVal(ident, init_val),
-};
-InitVal: InitVal = <exp: Exp> => InitVal { exp };
-
-
-// ---------------- DECL END ----------------
 
 
 // -------------- STMT START ----------------
@@ -186,7 +201,11 @@ UnaryExp: Box<UnaryExp> = {
 }
 
 FuncCall: Box<FuncCall> = {
-  <ident: Ident> "(" <args: Comma<Exp>> ")" => Box::new(FuncCall{ident, args}),
+  <ident: Ident> "(" ")" => Box::new(FuncCall{ident, args: Vec::new()}),
+  <ident: Ident> "(" <arg: Exp> <mut args: ("," <Exp>)*> ")" => {
+    args.insert(0, arg);
+    Box::new(FuncCall{ident, args})
+  }
 }
 
 PrimaryExp: Box<PrimaryExp> = {
@@ -214,15 +233,12 @@ UnaryOp: UnaryOp = {
   "!" => UnaryOp::Not,
 }
 
-Number: i32 = <num: IntConst> => <>;
-
 // 如果匹配到标识符, 就返回这个字符串
 // 一对尖括号在此处指代的是正则表达式匹配到的字符串 (&str)
 // 关于尖括号到底代表什么, 请 RTFM
 Ident: String = r"[_a-zA-Z][_a-zA-Z0-9]*" => <>.to_string();
 
-// 对整数字面量的处理方式: 把匹配到的字符串按对应进制转换成数字
-IntConst: i32 = {
+Number: i32 = {
   r"[1-9][0-9]*" => i32::from_str_radix(<>, 10).unwrap(),
   r"0[0-7]*" => i32::from_str_radix(<>, 8).unwrap(),
   r"0[xX][0-9a-fA-F]+" => i32::from_str_radix(&<>[2..], 16).unwrap(),

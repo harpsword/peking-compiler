@@ -167,16 +167,33 @@ pub trait Traversal {
 
 #[derive(Debug)]
 pub struct CompUnit {
-    pub func_defs: Vec<FuncDef>,
+    pub items: Vec<CompUnitItem>,
 }
 
 impl Traversal for CompUnit {
     fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
         sink(&TraversalStep::Enter(AstNode::CompUnit(self)));
-        for func_def in self.func_defs.iter() {
-            func_def.traversal(sink);
+        for item in self.items.iter() {
+            item.traversal(sink);
         }
         sink(&TraversalStep::Leave(AstNode::CompUnit(self)));
+    }
+}
+
+#[derive(Debug)]
+pub enum CompUnitItem {
+    FuncDef(FuncDef),
+    Decl(Decl),
+}
+
+impl Traversal for CompUnitItem {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        // sink(&TraversalStep::Enter(AstNode::CompUnitItem(self)));
+        match self {
+            CompUnitItem::FuncDef(func_def) => func_def.traversal(sink),
+            CompUnitItem::Decl(decl) => decl.traversal(sink),
+        }
+        // sink(&TraversalStep::Leave(AstNode::CompUnitItem(self)));
     }
 }
 
