@@ -81,6 +81,24 @@ FuncHead: (FuncType, String) = {
   "int" <ident: Ident> "(" => (FuncType::Int, ident),
 }
 
+/*
+采用这种写法的话，
+
+栈中有
+"int" Ident 
+
+此时就需要判断继续shift还是直接把 "int" reduce成 FuncType::Int，但是应该参考下一个元素来判断是否
+应该reduce成 FuncType::Int。
+
+改成正常版本之后，LR(1) parser不需要立马做出reduce的决定，可以继续shift，等到下一个元素的时候再
+判断reduce成哪一个。
+
+
+FuncHead: (FuncType, String) = {
+  <func_type: FuncType> <ident: Ident> "(" => (func_type, ident),
+}
+*/
+
 FuncType: FuncType = {
   "int" => FuncType::Int,
   "void" => FuncType::Void,
