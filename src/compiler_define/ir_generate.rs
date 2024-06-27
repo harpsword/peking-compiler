@@ -1,8 +1,15 @@
 use core::panic;
+use std::process::id;
 
+use decl::{ConstDecl, ConstExp, ConstInitVal};
 use expr::{AddExp, EqExp, LAndExp, LOrExp, MulExp, RelExp, UnaryExp};
 use koopa::ir::{
-    builder::{BasicBlockBuilder, GlobalBuilder, GlobalInstBuilder, LocalBuilder, LocalInstBuilder, ValueBuilder, ValueInserter}, entities::ValueData, BasicBlock, BinaryOp, Function, FunctionData, Program, Type, Value
+    builder::{
+        BasicBlockBuilder, GlobalBuilder, GlobalInstBuilder, LocalBuilder, LocalInstBuilder,
+        ValueBuilder, ValueInserter,
+    },
+    entities::ValueData,
+    BasicBlock, BinaryOp, Function, FunctionData, Program, Type, Value,
 };
 
 use crate::{
@@ -11,7 +18,7 @@ use crate::{
 };
 
 use super::{
-    semantic_analysis,
+    semantic_analysis::{self, const_calculate},
     symbol_table::{self, Symbol, SymbolTable},
 };
 
@@ -83,6 +90,15 @@ impl IRGenerator {
         self.ast_node_kind_stack
             .pop()
             .expect("should have ast node kind")
+    }
+
+    fn ast_kind_stack_check_first_n(&self, kinds: Vec<AstNodeKind>) -> bool {
+        for (k1, k2) in self.ast_node_kind_stack.iter().zip(kinds.iter()) {
+            if k1 != k2 {
+                return false;
+            }
+        }
+        true
     }
 
     fn ast_kind_stack_has(&self, kind: AstNodeKind) -> bool {
@@ -376,11 +392,11 @@ fn common_expression(generator: &mut IRGenerator, op: impl Into<BinaryOp>) {
     generator.append_return_value(or);
 }
 
-fn exp_ir_generate_v2(ast_node: &impl Traversal) {
-    
-}
-
 fn exp_ir_generate(generator: &mut IRGenerator, ast: &AstNode) {
+    if generator.ast_kind_stack_check_first_n(vec![AstNodeKind::CompUnit, AstNodeKind::VarDecl]) {
+        // for top level var define, need to skip it
+        return;
+    }
     if generator.ast_kind_stack_has(AstNodeKind::ConstDecl) {
         // expression in const decl shouldn't generate ir
         return;
@@ -562,13 +578,12 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
                 }
                 AstNode::ConstDecl(const_decl) => {
                     // last 1: ConstDecl
-                    // last 2: Decl
-                    // last 3: Block or CompUnit
-                    if generator.ast_kind_stack_check_last_n(3, AstNodeKind::Block) {
+                    // last 2: Block or CompUnit
+                    if generator.ast_kind_stack_check_last_n(2, AstNodeKind::Block) {
                         semantic_analysis::const_calculate(
                             *const_decl,
                             generator.current_symbol_table(),
-                        );  
+                        );
                     } else {
                         semantic_analysis::const_calculate(
                             *const_decl,
@@ -723,37 +738,52 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
                 }
 
                 AstNode::VarDef(var_def) => {
-                    let in_global = generator.ast_kind_stack_check_last_n(2, AstNodeKind::CompUnit);
+                    let in_global = generator.ast_kind_stack_check_last_n(1, AstNodeKind::CompUnit);
 
                     if in_global {
-                        unreachable!("global var cannot be defined in global scope");;
+                        let (name, init_value) = match var_def {
+                            decl::VarDef::IdentDefine(ident) => (ident, 0),
+                            decl::VarDef::IdentInitVal(ident, init_val) => {
+                                let const_exp = ConstExp {
+                                    exp: init_val.exp.clone(),
+                                };
+                                let mock_const = ConstDecl {
+                                    b_type: decl::BType::Int,
+                                    const_defs: vec![decl::ConstDef {
+                                        ident: ident.clone(),
+                                        const_init_val: ConstInitVal { const_exp },
+                                    }],
+                                };
+                                let mut local_symbol_table = SymbolTable::new();
+                                const_calculate(&mock_const, &mut local_symbol_table);
+                                let init_value = local_symbol_table
+                                    .get_const(&ident)
+                                    .expect("global var should have init value");
+                                (ident, init_value)
+                            }
+                        };
+                        let init_value = generator.global_new_value().integer(init_value);
+                        let alloc = generator.global_new_value().global_alloc(init_value);
+                        generator
+                            .global_symbol_table
+                            .insert_var(name.clone(), alloc);
+                    } else {
                         match var_def {
                             decl::VarDef::IdentDefine(ident) => {
-                                let init_value = generator.global_new_value().integer(0);
-                                let alloc = generator.global_new_value().global_alloc(init_value);
-                                // TODO insert it to global symbol table
+                                let alloc = generator.new_value().alloc(Type::get_i32());
+                                generator.extend([alloc]);
+                                generator.insert_var(ident.clone(), alloc);
                             }
                             decl::VarDef::IdentInitVal(ident, _) => {
-                                // there maybe some calculation?
+                                let rhs = generator.pop_return_value();
+                                let alloc = generator.new_value().alloc(Type::get_i32());
+                                let store = generator.new_value().store(rhs, alloc);
+                                generator.extend([alloc, store]);
+                                generator.insert_var(ident.clone(), alloc);
                             }
                         }
                     }
-
-                    match var_def {
-                        decl::VarDef::IdentDefine(ident) => {
-                            let alloc = generator.new_value().alloc(Type::get_i32());
-                            generator.extend([alloc]);
-                            generator.insert_var(ident.clone(), alloc);
-                        }
-                        decl::VarDef::IdentInitVal(ident, _) => {
-                            let rhs = generator.pop_return_value();
-                            let alloc = generator.new_value().alloc(Type::get_i32());
-                            let store = generator.new_value().store(rhs, alloc);
-                            generator.extend([alloc, store]);
-                            generator.insert_var(ident.clone(), alloc);
-                        }
-                    }
-                },
+                }
                 AstNode::Block(_) => {
                     generator.pop_current_symbol_table();
                 }
