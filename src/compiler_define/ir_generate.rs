@@ -2,8 +2,7 @@ use core::panic;
 
 use expr::{AddExp, EqExp, LAndExp, LOrExp, MulExp, RelExp, UnaryExp};
 use koopa::ir::{
-    builder::{BasicBlockBuilder, LocalBuilder, LocalInstBuilder, ValueBuilder},
-    BasicBlock, BinaryOp, Function, FunctionData, Program, Type, Value,
+    builder::{BasicBlockBuilder, GlobalBuilder, GlobalInstBuilder, LocalBuilder, LocalInstBuilder, ValueBuilder, ValueInserter}, entities::ValueData, BasicBlock, BinaryOp, Function, FunctionData, Program, Type, Value
 };
 
 use crate::{
@@ -191,7 +190,7 @@ impl IRGenerator {
                 return Some(symbol);
             }
         }
-        None
+        self.global_symbol_table.get_const(name)
     }
 
     fn insert_var(&mut self, name: String, value: Value) {
@@ -205,7 +204,7 @@ impl IRGenerator {
                 return Some(symbol);
             }
         }
-        None
+        self.global_symbol_table.get_var(name)
     }
 }
 
@@ -359,6 +358,10 @@ impl IRGenerator {
             .extend(iter);
     }
 
+    fn global_new_value(&mut self) -> GlobalBuilder {
+        self.program.new_value()
+    }
+
     fn new_value(&mut self) -> LocalBuilder {
         self.current_func_data().dfg_mut().new_value()
     }
@@ -373,7 +376,16 @@ fn common_expression(generator: &mut IRGenerator, op: impl Into<BinaryOp>) {
     generator.append_return_value(or);
 }
 
+fn exp_ir_generate_v2(ast_node: &impl Traversal) {
+    
+}
+
 fn exp_ir_generate(generator: &mut IRGenerator, ast: &AstNode) {
+    if generator.ast_kind_stack_has(AstNodeKind::ConstDecl) {
+        // expression in const decl shouldn't generate ir
+        return;
+    }
+    // need to ignore top level expression
     if !ast.get_kind().is_expression() {
         return;
     }
@@ -549,10 +561,20 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
                     }
                 }
                 AstNode::ConstDecl(const_decl) => {
-                    semantic_analysis::const_calculate(
-                        *const_decl,
-                        generator.current_symbol_table(),
-                    );
+                    // last 1: ConstDecl
+                    // last 2: Decl
+                    // last 3: Block or CompUnit
+                    if generator.ast_kind_stack_check_last_n(3, AstNodeKind::Block) {
+                        semantic_analysis::const_calculate(
+                            *const_decl,
+                            generator.current_symbol_table(),
+                        );  
+                    } else {
+                        semantic_analysis::const_calculate(
+                            *const_decl,
+                            &mut generator.global_symbol_table,
+                        );
+                    }
                 }
                 AstNode::Stmt(Stmt::IfElseStmt(_, _, _)) => {
                     generator.push_if_else();
@@ -700,18 +722,36 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
                     generator.push_block(end_block);
                 }
 
-                AstNode::VarDef(var_def) => match var_def {
-                    decl::VarDef::IdentDefine(ident) => {
-                        let alloc = generator.new_value().alloc(Type::get_i32());
-                        generator.extend([alloc]);
-                        generator.insert_var(ident.clone(), alloc);
+                AstNode::VarDef(var_def) => {
+                    let in_global = generator.ast_kind_stack_check_last_n(2, AstNodeKind::CompUnit);
+
+                    if in_global {
+                        unreachable!("global var cannot be defined in global scope");;
+                        match var_def {
+                            decl::VarDef::IdentDefine(ident) => {
+                                let init_value = generator.global_new_value().integer(0);
+                                let alloc = generator.global_new_value().global_alloc(init_value);
+                                // TODO insert it to global symbol table
+                            }
+                            decl::VarDef::IdentInitVal(ident, _) => {
+                                // there maybe some calculation?
+                            }
+                        }
                     }
-                    decl::VarDef::IdentInitVal(ident, _) => {
-                        let rhs = generator.pop_return_value();
-                        let alloc = generator.new_value().alloc(Type::get_i32());
-                        let store = generator.new_value().store(rhs, alloc);
-                        generator.extend([alloc, store]);
-                        generator.insert_var(ident.clone(), alloc);
+
+                    match var_def {
+                        decl::VarDef::IdentDefine(ident) => {
+                            let alloc = generator.new_value().alloc(Type::get_i32());
+                            generator.extend([alloc]);
+                            generator.insert_var(ident.clone(), alloc);
+                        }
+                        decl::VarDef::IdentInitVal(ident, _) => {
+                            let rhs = generator.pop_return_value();
+                            let alloc = generator.new_value().alloc(Type::get_i32());
+                            let store = generator.new_value().store(rhs, alloc);
+                            generator.extend([alloc, store]);
+                            generator.insert_var(ident.clone(), alloc);
+                        }
                     }
                 },
                 AstNode::Block(_) => {
@@ -721,10 +761,7 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
                 _ => {}
             }
 
-            // expression in const decl shouldn't generate ir
-            if !generator.ast_kind_stack_has(AstNodeKind::ConstDecl) {
-                exp_ir_generate(&mut generator, leave);
-            }
+            exp_ir_generate(&mut generator, leave);
         }
     };
 

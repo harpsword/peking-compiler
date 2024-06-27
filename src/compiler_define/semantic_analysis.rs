@@ -82,9 +82,6 @@ pub fn const_calculate(ast_node: &impl Traversal, symbol: &mut SymbolTable) {
                     const_calc.values.clear();
 
                     symbol.insert_const(const_def.ident.clone(), value);
-                    // const_calc
-                    //     .const_table
-                    //     .insert_const(const_def.ident.clone(), value);
                 }
                 AstNode::LOrExp(exp) => match exp {
                     LOrExp::LOrExpOpLAndExp(_, _) => {
