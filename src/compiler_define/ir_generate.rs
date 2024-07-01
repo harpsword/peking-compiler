@@ -92,7 +92,7 @@ impl IRGenerator {
             .expect("should have ast node kind")
     }
 
-    fn ast_kind_stack_check_first_n(&self, kinds: Vec<AstNodeKind>) -> bool {
+    fn ast_kind_stack_first_n_is(&self, kinds: Vec<AstNodeKind>) -> bool {
         for (k1, k2) in self.ast_node_kind_stack.iter().zip(kinds.iter()) {
             if k1 != k2 {
                 return false;
@@ -178,9 +178,10 @@ impl IRGenerator {
                 return Some(symbol);
             }
         }
-        None
+        self.global_symbol_table.get_symbol(name)
     }
 
+    /// not update global symbol table
     fn update_symbol(&mut self, name: String, symbol: Symbol) -> Option<Symbol> {
         for symbol_table in self.symbol_tables.iter_mut().rev() {
             let has_symbol = symbol_table.get_symbol(&name).is_some();
@@ -192,14 +193,6 @@ impl IRGenerator {
         None
     }
 
-    fn insert_symbol(&mut self, name: String, symbol: Symbol) {
-        self.current_symbol_table().insert_symbol(name, symbol);
-    }
-
-    fn insert_const(&mut self, name: String, value: i32) {
-        self.current_symbol_table().insert_const(name, value);
-    }
-
     fn get_const(&self, name: &str) -> Option<i32> {
         for symbol_table in self.symbol_tables.iter().rev() {
             if let Some(symbol) = symbol_table.get_const(name) {
@@ -207,11 +200,6 @@ impl IRGenerator {
             }
         }
         self.global_symbol_table.get_const(name)
-    }
-
-    fn insert_var(&mut self, name: String, value: Value) {
-        // duplicate var check
-        self.current_symbol_table().insert_var(name, value);
     }
 
     fn get_var(&mut self, name: &str) -> Option<Value> {
@@ -393,7 +381,7 @@ fn common_expression(generator: &mut IRGenerator, op: impl Into<BinaryOp>) {
 }
 
 fn exp_ir_generate(generator: &mut IRGenerator, ast: &AstNode) {
-    if generator.ast_kind_stack_check_first_n(vec![AstNodeKind::CompUnit, AstNodeKind::VarDecl]) {
+    if generator.ast_kind_stack_first_n_is(vec![AstNodeKind::CompUnit, AstNodeKind::VarDecl]) {
         // for top level var define, need to skip it
         return;
     }
@@ -572,7 +560,9 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
                         }
 
                         while let Some((param, value)) = param_vector.pop() {
-                            generator.insert_symbol(param, Symbol::FuncParam(value));
+                            generator
+                                .current_symbol_table()
+                                .insert_symbol(param, Symbol::FuncParam(value));
                         }
                     }
                 }
@@ -738,7 +728,7 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
                 }
 
                 AstNode::VarDef(var_def) => {
-                    let in_global = generator.ast_kind_stack_check_last_n(1, AstNodeKind::CompUnit);
+                    let in_global = generator.ast_kind_stack_check_last_n(2, AstNodeKind::CompUnit);
 
                     if in_global {
                         let (name, init_value) = match var_def {
@@ -772,14 +762,18 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
                             decl::VarDef::IdentDefine(ident) => {
                                 let alloc = generator.new_value().alloc(Type::get_i32());
                                 generator.extend([alloc]);
-                                generator.insert_var(ident.clone(), alloc);
+                                generator
+                                    .current_symbol_table()
+                                    .insert_var(ident.clone(), alloc);
                             }
                             decl::VarDef::IdentInitVal(ident, _) => {
                                 let rhs = generator.pop_return_value();
                                 let alloc = generator.new_value().alloc(Type::get_i32());
                                 let store = generator.new_value().store(rhs, alloc);
                                 generator.extend([alloc, store]);
-                                generator.insert_var(ident.clone(), alloc);
+                                generator
+                                    .current_symbol_table()
+                                    .insert_var(ident.clone(), alloc);
                             }
                         }
                     }

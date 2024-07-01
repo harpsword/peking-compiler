@@ -85,6 +85,7 @@ impl Traversal for VarDecl {
         for var_def in self.var_defs.iter() {
             var_def.traversal(sink);
         }
+        sink(&TraversalStep::Leave(AstNode::VarDecl(self)));
     }
 }
 
