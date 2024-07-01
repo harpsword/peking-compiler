@@ -1,5 +1,6 @@
-use std::collections::HashMap;
+use std::{borrow::Borrow, collections::HashMap, fmt::format, thread::panicking};
 
+use env_logger::init;
 use koopa::ir::{values, Function, FunctionData, Program, TypeKind, Value, ValueKind};
 use log::info;
 use once_cell::sync::Lazy;
@@ -64,6 +65,7 @@ struct FuncStackSizeCalculationResult {
 enum InstructionResult {
     Register(String),
     Stack(usize),
+    Var(String),
 }
 
 impl InstructionResult {
@@ -71,6 +73,7 @@ impl InstructionResult {
         match self {
             InstructionResult::Register(reg) => reg,
             InstructionResult::Stack(offset) => format!("{}(sp)", offset),
+            InstructionResult::Var(reg) => format!("0({})", reg),
         }
     }
 }
@@ -158,12 +161,54 @@ impl RiscvGenerator {
 
 impl RiscvGenerator {
     fn generate_riscv(mut self, program: Program) -> String {
+        // TODO deal with global var
+        // and need to deal with reference of this
+
+        self.deal_with_gloabl_var(&program);
+
         let mut program_iter = program.func_layout().iter();
         while let Some(func) = program_iter.next() {
             self.generate_riscv_for_func(&program, *func);
         }
 
         self.result.generate_result()
+    }
+
+    fn get_global_var_name(&self, value: &Value) -> String {
+        // value.
+        let value_print = format!("{:?}", value);
+        let value_print_len = value_print.len();
+        let value_id = value_print
+            .get(6..value_print_len - 1)
+            .expect("should get correct value id");
+        format!("var{}", value_id)
+    }
+
+    fn deal_with_gloabl_var(&mut self, program: &Program) {
+        for value in program.inst_layout().iter() {
+            let value_data = program.borrow_value(*value);
+            let global_var_name = self.get_global_var_name(value);
+            let init_value = match value_data.kind() {
+                ValueKind::GlobalAlloc(global_var) => {
+                    let init_value_data = program.borrow_value(global_var.init());
+                    if let ValueKind::Integer(v) = init_value_data.kind() {
+                        v.value()
+                    } else {
+                        panic!("should be integer for global init value");
+                    }
+                }
+                _ => panic!("should be all global allocs"),
+            };
+            self.result.append("  .data");
+            self.result.append(format!("  .global {}", global_var_name));
+            self.result.append(format!("{}:", global_var_name));
+            if init_value == 0 {
+                self.result.append("  .zero 4");
+            } else {
+                self.result.append(format!(".word {}", init_value));
+            }
+            self.result.append("");
+        }
     }
 
     fn extract_func_name_from_koopa_func(func_name: &str) -> &str {
@@ -294,7 +339,7 @@ impl RiscvGenerator {
             .unwrap();
         match value {
             InstructionResult::Register(register) => register,
-            InstructionResult::Stack(_) => {
+            InstructionResult::Stack(_) | InstructionResult::Var(_) => {
                 if stack_load_to_register {
                     let register = self.assign_register();
                     self.result
@@ -320,7 +365,10 @@ impl RiscvGenerator {
             return instr_result.dst;
         }
 
-        let value_data = func.dfg().value(value);
+        let value_data = match value.is_global() {
+            true => &program.borrow_value(value),
+            false => func.dfg().value(value),
+        };
 
         let size = value_data.ty().size();
         let dst = match value_data.kind() {
@@ -330,6 +378,12 @@ impl RiscvGenerator {
             ValueKind::Alloc(_) => {
                 let dst = self.stack_manager.assign(size);
                 dst.map(|x| InstructionResult::Stack(x))
+            }
+            ValueKind::GlobalAlloc(global_alloc) => {
+                let global_var_name = self.get_global_var_name(&value);
+                self.result.append(Instruction::La("t0", &global_var_name));
+
+                Some(InstructionResult::Var("t0".to_string()))
             }
             ValueKind::Store(s) => {
                 let value = self.load_value(program, func, s.value(), true);
@@ -374,7 +428,7 @@ impl RiscvGenerator {
                         InstructionResult::Register(register) => {
                             self.result.append(Instruction::Mov("a0", &register));
                         }
-                        InstructionResult::Stack(_) => {
+                        InstructionResult::Stack(_) | InstructionResult::Var(_) => {
                             self.result.append(Instruction::Lw("a0", &src.to_string()));
                         }
                     }

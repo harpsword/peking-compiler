@@ -76,6 +76,11 @@ pub(crate) enum Instruction<'a> {
     /// src should be like 0(sp)
     Lw(&'a str, &'a str),
 
+    /// La(dst, src)
+    /// should be La(register, var_name)
+    /// it will load the adress of var_name to register
+    La(&'a str, &'a str),
+
     /// bnez cond, target
     /// if cond != 0, jump to target
     Bnez(&'a str, &'a str),
@@ -115,6 +120,7 @@ impl<'a> Into<String> for Instruction<'a> {
             Instruction::Mov(dst, src) => format!("  mv {dst}, {src}"),
             Instruction::Sw(dst, src) => format!("  sw {src}, {dst}"),
             Instruction::Lw(dst, src) => format!("  lw {dst}, {src}"),
+            Instruction::La(dst, src) => format!("  la {dst}, {src}"),
 
             Instruction::Bnez(cond, target) => format!("  bnez {cond}, {target}"),
             Instruction::Jump(target) => format!("  j {target}"),
