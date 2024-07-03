@@ -1,6 +1,7 @@
 use std::{borrow::Borrow, collections::HashMap, fmt::format, ops::Index, thread::panicking};
 
 use env_logger::init;
+use function_ctx::FuncCtx;
 use koopa::ir::{values, Function, FunctionData, Program, TypeKind, Value, ValueKind};
 use log::info;
 use once_cell::sync::Lazy;
@@ -53,14 +54,6 @@ impl StackManager {
         self.used = self.used + size;
         Some(offset)
     }
-}
-
-#[derive(Debug)]
-struct FuncStackSizeCalculationResult {
-    stack_size: usize,
-    local_var_size: usize,
-    parameter_size: usize,
-    need_save_ra: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -213,83 +206,26 @@ impl RiscvGenerator {
         }
     }
 
-    fn extract_func_name_from_koopa_func(func_name: &str) -> &str {
-        if func_name.starts_with("@") {
-            return &func_name[1..];
-        }
-        return func_name;
-    }
-
-    /// calculate the stack size of a function
-    fn func_stack_size_calculation(
-        &mut self,
-        program: &Program,
-        func_data: &FunctionData,
-    ) -> FuncStackSizeCalculationResult {
-        let mut size = 0;
-        let mut ra_space = 0;
-        let mut parameter_count_bigger_than_8 = 0;
-        for (_, node) in func_data.layout().bbs() {
-            for &inst in node.insts().keys() {
-                let value_data = func_data.dfg().value(inst);
-                info!(
-                    "name: {:?}, ty: {}, size: {}",
-                    value_data.name(),
-                    value_data.ty(),
-                    value_data.ty().size()
-                );
-                size = size + value_data.ty().size();
-
-                match value_data.kind() {
-                    ValueKind::Call(call) => {
-                        ra_space = 4;
-
-                        let param_counts = call.args().len();
-                        if param_counts > 8 {
-                            parameter_count_bigger_than_8 =
-                                std::cmp::max(param_counts - 8, parameter_count_bigger_than_8);
-                        }
-
-                        let callee_func_data = program.func(call.callee());
-                        let return_value_size = match callee_func_data.ty().kind() {
-                            TypeKind::Function(_, ret) => ret.size(),
-                            _ => unreachable!(),
-                        };
-                        size = size + return_value_size;
-                    }
-                    _ => {}
-                }
-            }
-        }
-        let mut stack_size = size + parameter_count_bigger_than_8 * 4 + ra_space;
-        stack_size = (stack_size + 15) / 16 * 16;
-        FuncStackSizeCalculationResult {
-            stack_size: stack_size,
-            local_var_size: size,
-            parameter_size: parameter_count_bigger_than_8 * 4,
-            need_save_ra: ra_space > 0,
-        }
-    }
-
     fn generate_riscv_for_func(&mut self, program: &Program, func: Function) {
         let func_data = program.func(func);
-        if func_data.layout().entry_bb().is_none() {
+        let mut func_ctx = FuncCtx::new(func_data);
+
+        if func_ctx.is_decl_func() {
             // decl function, just return
             return;
         }
 
-        let func_name = Self::extract_func_name_from_koopa_func(func_data.name());
-        self.stack_manager.reset();
-        self.result.function_begin(func_name);
+        self.result.function_begin(func_ctx.get_name());
 
-        let calculation_result = self.func_stack_size_calculation(program, func_data);
-        info!("func: {}, calculation result: {:?}", func_name, calculation_result);
+        func_ctx.func_stack_size_calculation(program);
+        let calculation_result = &func_ctx.stack_result;
+
         let size = calculation_result.stack_size;
         self.stack_manager.set_size(size);
         // assign parameter size first
         self.stack_manager.assign(calculation_result.parameter_size);
-        let size: i32 = size.try_into().unwrap();
 
+        let size: i32 = size.try_into().unwrap();
         // prologue
         if size > 0 {
             self.result.append(Instruction::Addi("sp", "sp", -size));
@@ -300,15 +236,15 @@ impl RiscvGenerator {
         }
 
         // deal with other instructions
-        for (bb, node) in func_data.layout().bbs() {
-            let bb_name = tools::get_bb_name(func_data, *bb);
+        for (bb, node) in func_ctx.func_data.layout().bbs() {
+            let bb_name = func_ctx.get_bb_name(*bb);
             if let Some(bb_name) = bb_name {
                 if bb_name != "entry" {
                     self.result.append(format!("{}:", bb_name));
                 }
             }
             for &inst in node.insts().keys() {
-                self.generate_riscv_for_instruction(program, func_data, inst);
+                self.generate_riscv_for_instruction(program, &func_ctx, inst);
             }
         }
 
@@ -325,8 +261,9 @@ impl RiscvGenerator {
             self.result.append(Instruction::Addi("sp", "sp", size));
         }
         self.result.append(Instruction::Ret);
-        self.stack_manager.set_size(0);
         self.result.append("");
+
+        self.stack_manager.reset();
     }
 
     // used to load data from register or stack
@@ -335,12 +272,12 @@ impl RiscvGenerator {
     fn load_value(
         &mut self,
         program: &Program,
-        func: &FunctionData,
+        func_ctx: &FuncCtx,
         value: Value,
         stack_load_to_register: bool,
     ) -> String {
         let value = self
-            .generate_riscv_for_instruction(program, func, value);
+            .generate_riscv_for_instruction(program, func_ctx, value);
 
         if value.is_none() {
             info!("test");
@@ -366,9 +303,10 @@ impl RiscvGenerator {
     fn generate_riscv_for_instruction(
         &mut self,
         program: &Program,
-        func: &FunctionData,
+        func_ctx: &FuncCtx,
         value: Value,
     ) -> Option<InstructionResult> {
+        let func = func_ctx.func_data;
         let instr_result = self.get_instruction_result(value);
         if instr_result.is_finished {
             return instr_result.dst;
@@ -383,13 +321,13 @@ impl RiscvGenerator {
         let dst = match value_data.kind() {
             ValueKind::FuncArgRef(func_arg_ref) => {
                 let index = func_arg_ref.index();
-                let result = if (index <= 8) {
+                let result = if (index < 8) {
                     InstructionResult::Register(
                         Self::get_func_arg_register(func_arg_ref.index()),
                     )
                 } else {
-                    // TODO need to load it from last SP
-                    InstructionResult::Stack((index-9)*4)
+                    let offset = func_ctx.stack_result.stack_size + (index-8)*4;
+                    InstructionResult::Stack(offset)
                 };
                 Some(result)
             },
@@ -404,8 +342,8 @@ impl RiscvGenerator {
                 Some(InstructionResult::Var("t0".to_string()))
             }
             ValueKind::Store(s) => {
-                let value = self.load_value(program, func, s.value(), true);
-                let dst = self.load_value(program, func, s.dest(), false);
+                let value = self.load_value(program, func_ctx, s.value(), true);
+                let dst = self.load_value(program, func_ctx, s.dest(), false);
                 self.result.append(Instruction::Sw(&dst, &value));
 
                 self.release_register(value);
@@ -413,7 +351,7 @@ impl RiscvGenerator {
             }
             ValueKind::Load(load) => {
                 // load src to register
-                let src = self.load_value(program, func, load.src(), true);
+                let src = self.load_value(program, func_ctx, load.src(), true);
 
                 // write register to dst
                 let dst = self
@@ -440,7 +378,7 @@ impl RiscvGenerator {
             ValueKind::Return(r) => {
                 if let Some(return_value) = r.value() {
                     let src = self
-                        .generate_riscv_for_instruction(program, func, return_value)
+                        .generate_riscv_for_instruction(program, func_ctx, return_value)
                         .unwrap();
                     match src {
                         InstructionResult::Register(register) => {
@@ -456,8 +394,8 @@ impl RiscvGenerator {
                 None
             }
             ValueKind::Binary(binary) => {
-                let lhs = self.load_value(program, func, binary.lhs(), true);
-                let rhs = self.load_value(program, func, binary.rhs(), true);
+                let lhs = self.load_value(program, func_ctx, binary.lhs(), true);
+                let rhs = self.load_value(program, func_ctx, binary.rhs(), true);
                 let destination_register = self.assign_register();
                 match binary.op() {
                     values::BinaryOp::Eq => {
@@ -556,12 +494,12 @@ impl RiscvGenerator {
                 Some(destination)
             }
             ValueKind::Branch(branch) => {
-                let cond = self.load_value(program, func, branch.cond(), true);
+                let cond = self.load_value(program, func_ctx, branch.cond(), true);
 
                 let then_bb =
-                    tools::get_bb_name(func, branch.true_bb()).expect("then bb should have name");
+                    func_ctx.get_bb_name(branch.true_bb()).expect("then bb should have name");
                 let else_bb =
-                    tools::get_bb_name(func, branch.false_bb()).expect("else bb should have name");
+                func_ctx.get_bb_name(branch.false_bb()).expect("else bb should have name");
 
                 self.result.append(Instruction::Bnez(&cond, then_bb));
                 self.result.append(Instruction::Jump(else_bb));
@@ -570,7 +508,7 @@ impl RiscvGenerator {
                 None
             }
             ValueKind::Jump(jump) => {
-                let target_bb = tools::get_bb_name(func, jump.target())
+                let target_bb =func_ctx.get_bb_name(jump.target())
                     .expect("jump target bb should have name");
                 self.result.append(Instruction::Jump(target_bb));
 
@@ -583,7 +521,7 @@ impl RiscvGenerator {
                 let mut arg_count = 0;
                 let mut param_stack_used_size = 0;
                 for arg in call.args() {
-                    let arg_value = self.load_value(program, func, *arg, true);
+                    let arg_value = self.load_value(program, func_ctx, *arg, true);
                     // TODO, optimize performance
                     if arg_count < 8 {
                         self.result.append(Instruction::Mov(
@@ -659,17 +597,6 @@ impl RiscvGenerator {
 
 pub(crate) mod tools {
     use koopa::ir::{BasicBlock, FunctionData};
-
-    pub(crate) fn get_bb_name(func: &FunctionData, bb: BasicBlock) -> Option<&str> {
-        let name = func.dfg().bb(bb).name().as_ref();
-        if let Some(name) = name {
-            if name.starts_with("@") {
-                return Some(&name[1..]);
-            }
-            return Some(&name);
-        }
-        None
-    }
 
     pub(crate) fn turn_into_ir_name(name: &str) -> String {
         format!("@{}", name)
