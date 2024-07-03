@@ -1,3 +1,5 @@
+use log::info;
+
 pub(crate) struct RiskVCode {
     insts: Vec<String>,
 }
@@ -118,7 +120,12 @@ impl<'a> Into<String> for Instruction<'a> {
 
             Instruction::Li(dst, src) => format!("  li {dst}, {src}"),
             Instruction::Mov(dst, src) => format!("  mv {dst}, {src}"),
-            Instruction::Sw(dst, src) => format!("  sw {src}, {dst}"),
+            Instruction::Sw(dst, src) => {
+                if src == "a10" {
+                    info!("sw a10");
+                }
+                format!("  sw {src}, {dst}")
+            },
             Instruction::Lw(dst, src) => format!("  lw {dst}, {src}"),
             Instruction::La(dst, src) => format!("  la {dst}, {src}"),
 

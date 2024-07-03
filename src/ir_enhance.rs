@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, collections::HashMap, fmt::format, thread::panicking};
+use std::{borrow::Borrow, collections::HashMap, fmt::format, ops::Index, thread::panicking};
 
 use env_logger::init;
 use koopa::ir::{values, Function, FunctionData, Program, TypeKind, Value, ValueKind};
@@ -8,6 +8,7 @@ use once_cell::sync::Lazy;
 use crate::riscv::{Instruction, RiskVCode};
 
 pub(crate) mod ir_builder;
+pub(crate) mod function_ctx;
 
 pub(crate) fn generate_riscv(program: Program) -> String {
     let generator = RiscvGenerator::new();
@@ -54,6 +55,7 @@ impl StackManager {
     }
 }
 
+#[derive(Debug)]
 struct FuncStackSizeCalculationResult {
     stack_size: usize,
     local_var_size: usize,
@@ -281,6 +283,7 @@ impl RiscvGenerator {
         self.result.function_begin(func_name);
 
         let calculation_result = self.func_stack_size_calculation(program, func_data);
+        info!("func: {}, calculation result: {:?}", func_name, calculation_result);
         let size = calculation_result.stack_size;
         self.stack_manager.set_size(size);
         // assign parameter size first
@@ -300,7 +303,9 @@ impl RiscvGenerator {
         for (bb, node) in func_data.layout().bbs() {
             let bb_name = tools::get_bb_name(func_data, *bb);
             if let Some(bb_name) = bb_name {
-                self.result.append(format!("{}:", bb_name));
+                if bb_name != "entry" {
+                    self.result.append(format!("{}:", bb_name));
+                }
             }
             for &inst in node.insts().keys() {
                 self.generate_riscv_for_instruction(program, func_data, inst);
@@ -335,8 +340,12 @@ impl RiscvGenerator {
         stack_load_to_register: bool,
     ) -> String {
         let value = self
-            .generate_riscv_for_instruction(program, func, value)
-            .unwrap();
+            .generate_riscv_for_instruction(program, func, value);
+
+        if value.is_none() {
+            info!("test");
+        }
+        let value = value.unwrap();
         match value {
             InstructionResult::Register(register) => register,
             InstructionResult::Stack(_) | InstructionResult::Var(_) => {
@@ -372,9 +381,18 @@ impl RiscvGenerator {
 
         let size = value_data.ty().size();
         let dst = match value_data.kind() {
-            ValueKind::FuncArgRef(func_arg_ref) => Some(InstructionResult::Register(
-                Self::get_func_arg_register(func_arg_ref.index()),
-            )),
+            ValueKind::FuncArgRef(func_arg_ref) => {
+                let index = func_arg_ref.index();
+                let result = if (index <= 8) {
+                    InstructionResult::Register(
+                        Self::get_func_arg_register(func_arg_ref.index()),
+                    )
+                } else {
+                    // TODO need to load it from last SP
+                    InstructionResult::Stack((index-9)*4)
+                };
+                Some(result)
+            },
             ValueKind::Alloc(_) => {
                 let dst = self.stack_manager.assign(size);
                 dst.map(|x| InstructionResult::Stack(x))
@@ -577,10 +595,11 @@ impl RiscvGenerator {
                             &format!("{}(sp)", param_stack_used_size),
                             &arg_value,
                         ));
-                        let arg_size = {
-                            let value_data = func.dfg().value(*arg);
-                            value_data.ty().size()
-                        };
+                        // let arg_size = {
+                        //     let value_data = func.dfg().value(*arg);
+                        //     value_data.ty().size()
+                        // };
+                        let arg_size = 4;
                         param_stack_used_size += arg_size;
                     }
 
