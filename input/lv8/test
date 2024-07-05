@@ -1,0 +1,104 @@
+  .data
+  .global var2
+var2:
+.word 10
+
+  .text
+  .globl inc
+inc:
+  addi sp, sp, -16
+
+// %1 = load %0
+  la t0, var2
+  lw t0, 0(t0)
+  sw t0, 0(sp)
+
+// %2 = %1 + 1
+  lw t0, 0(sp)
+  li t1, 1
+  add t2, t0, t1
+  sw t2, 4(sp)
+
+// store %2, %0
+  lw t0, 4(sp) // get result
+  la t1, var2
+  sw t0, 0(t1) // save resul to var2
+
+  la t0, var2
+  lw t0, 0(t0)
+  sw t0, 8(sp)
+
+  lw a0, 8(sp)
+  addi sp, sp, 16
+  ret
+
+  .text
+  .globl print_a
+print_a:
+  addi sp, sp, -16
+  sw ra, 12(sp)
+  lw t0, 0(t0)
+  sw t0, 0(sp)
+  lw t0, 0(sp)
+  mv a0, t0
+  call putint
+  li t0, 10
+  mv a0, t0
+  call putch
+  lw ra, 12(sp)
+  addi sp, sp, 16
+  ret
+
+  .text
+  .globl main
+main:
+  addi sp, sp, -64
+  sw ra, 60(sp)
+  sw x0, 0(sp) // 0(sp)=0
+  j while_entry0
+while_entry0:
+  lw t0, 0(sp), // t0=0(sp)
+  sw t0, 8(sp), // 
+  lw t0, 8(sp)
+  li t1, 10
+  slt t2, t0, t1
+  sw t2, 12(sp)
+  lw t0, 12(sp)
+  bnez t0, while_body0
+  j while_end0
+while_body0:
+  call inc
+  sw a0, 16(sp)
+  li t0, 1
+  sw t0, 20(sp)
+  lw t0, 20(sp)
+  sw t0, 28(sp)
+  lw t0, 28(sp)
+  li t1, 2
+  add t2, t0, t1
+  sw t2, 32(sp)
+  lw t0, 32(sp)
+  sw t0, 20(sp)
+  lw t0, 20(sp)
+  sw t0, 36(sp)
+  lw t0, 36(sp)
+  mv a0, t0
+  call putint
+  li t0, 10
+  mv a0, t0
+  call putch
+  call print_a
+  lw t0, 0(sp)
+  sw t0, 40(sp)
+  lw t0, 40(sp)
+  li t1, 1
+  add t2, t0, t1
+  sw t2, 44(sp)
+  lw t0, 44(sp)
+  sw t0, 0(sp)
+  j while_entry0
+while_end0:
+  mv a0, x0
+  lw ra, 60(sp)
+  addi sp, sp, 64
+  ret

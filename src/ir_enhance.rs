@@ -76,6 +76,7 @@ impl InstructionResult {
 #[derive(Clone)]
 struct InstructionExplanation {
     dst: Option<InstructionResult>,
+    // 记录了这条指令是否已经完成
     is_finished: bool,
 }
 
@@ -144,11 +145,11 @@ impl RiscvGenerator {
             return;
         }
         let occuption = self.register_occupition.insert(register, false);
-        // occuption should be exist and true
-        assert!(occuption.is_some());
         if occuption.is_none() || !occuption.unwrap_or(false) {
             info!("log");
         }
+        // occuption should be exist and true
+        // assert!(occuption.is_some());
         // assert!(occuption.unwrap_or(false));
     }
 
@@ -159,9 +160,6 @@ impl RiscvGenerator {
 
 impl RiscvGenerator {
     fn generate_riscv(mut self, program: Program) -> String {
-        // TODO deal with global var
-        // and need to deal with reference of this
-
         self.deal_with_gloabl_var(&program);
 
         let mut program_iter = program.func_layout().iter();
@@ -288,7 +286,7 @@ impl RiscvGenerator {
         let value = value.unwrap();
         match value {
             InstructionResult::Register(register) => register,
-            InstructionResult::Stack(_) | InstructionResult::Var(_) => {
+            InstructionResult::Stack(_) => {
                 if stack_load_to_register {
                     let register = self.assign_register();
                     self.result
@@ -297,6 +295,15 @@ impl RiscvGenerator {
                 } else {
                     return value.to_string();
                 }
+            },
+            InstructionResult::Var(ref var_register) if stack_load_to_register => {
+                let var_register = var_register.clone();
+                let value_str = value.to_string();
+                self.result.append(Instruction::Lw(&var_register, &value_str));
+                var_register.clone()
+            },
+            InstructionResult::Var(_) => {
+                value.to_string()
             }
         }
     }
@@ -321,6 +328,7 @@ impl RiscvGenerator {
         };
 
         let size = value_data.ty().size();
+        let mut is_finished = true;
         let dst = match value_data.kind() {
             ValueKind::FuncArgRef(func_arg_ref) => {
                 let index = func_arg_ref.index();
@@ -340,9 +348,12 @@ impl RiscvGenerator {
             }
             ValueKind::GlobalAlloc(global_alloc) => {
                 let global_var_name = self.get_global_var_name(&value);
-                self.result.append(Instruction::La("t0", &global_var_name));
+                let register = self.assign_register();
+                self.result.append(Instruction::La(&register, &global_var_name));
+                // never finished, need to load var address to register again
+                is_finished = false;
 
-                Some(InstructionResult::Var("t0".to_string()))
+                Some(InstructionResult::Var(register))
             }
             ValueKind::Store(s) => {
                 let value = self.load_value(program, func_ctx, s.value(), true);
@@ -353,7 +364,6 @@ impl RiscvGenerator {
                 None
             }
             ValueKind::Load(load) => {
-                // load src to register
                 let src = self.load_value(program, func_ctx, load.src(), true);
 
                 // write register to dst
@@ -591,7 +601,7 @@ impl RiscvGenerator {
         self.instruction_results.insert(
             value,
             InstructionExplanation {
-                is_finished: true,
+                is_finished: is_finished,
                 dst: dst.clone(),
             },
         );
