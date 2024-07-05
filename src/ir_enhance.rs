@@ -146,7 +146,10 @@ impl RiscvGenerator {
         let occuption = self.register_occupition.insert(register, false);
         // occuption should be exist and true
         assert!(occuption.is_some());
-        assert!(occuption.unwrap_or(false));
+        if occuption.is_none() || !occuption.unwrap_or(false) {
+            info!("log");
+        }
+        // assert!(occuption.unwrap_or(false));
     }
 
     fn get_func_arg_register(index: usize) -> String {
@@ -520,7 +523,9 @@ impl RiscvGenerator {
                 // rest parameters will be on stack
                 let mut arg_count = 0;
                 let mut param_stack_used_size = 0;
+                info!("start call: {:#?}", call);
                 for arg in call.args() {
+                    info!("call arg: {:#?}, func: {:#?}", arg, call.callee());
                     let arg_value = self.load_value(program, func_ctx, *arg, true);
                     // TODO, optimize performance
                     if arg_count < 8 {

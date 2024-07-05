@@ -453,12 +453,11 @@ fn exp_ir_generate(generator: &mut IRGenerator, ast: &AstNode) {
                 }
             },
             UnaryExp::FuncCall(func_call) => {
-                let mut args: Vec<_> = generator
-                    .return_values
-                    .iter()
-                    .take(func_call.args.len())
-                    .map(|x| x.clone())
-                    .collect();
+                let want_len = func_call.args.len();
+                assert!(generator.return_values.len() >= want_len);
+                let want_index = generator.return_values.len() - want_len;
+
+                let args: Vec<_> = generator.return_values.split_off(want_index);
                 let func_name = tools::turn_into_ir_name(&func_call.ident);
                 let function = match generator
                     .global_symbol_table
@@ -469,8 +468,6 @@ fn exp_ir_generate(generator: &mut IRGenerator, ast: &AstNode) {
                     Symbol::Func(function) => function,
                     _ => unreachable!("function not found"),
                 };
-                args.reverse();
-                // TODO
                 let call = generator.new_value().call(function, args);
 
                 generator.extend([call]);
