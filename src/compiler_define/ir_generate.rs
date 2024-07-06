@@ -1,22 +1,38 @@
 use core::panic;
-use std::{mem, thread::panicking};
+use std::process::id;
 
-use expr::{AddExp, EqExp, LAndExp, LOrExp, MulExp, PrimaryExp, RelExp, UnaryExp};
+use decl::{ConstDecl, ConstExp, ConstInitVal};
+use expr::{AddExp, EqExp, LAndExp, LOrExp, MulExp, RelExp, UnaryExp};
 use koopa::ir::{
-    builder::{BasicBlockBuilder, LocalBuilder, LocalInstBuilder, ValueBuilder},
+    builder::{
+        BasicBlockBuilder, GlobalBuilder, GlobalInstBuilder, LocalBuilder, LocalInstBuilder,
+        ValueBuilder, ValueInserter,
+    },
+    entities::ValueData,
     BasicBlock, BinaryOp, Function, FunctionData, Program, Type, Value,
 };
 
-use crate::ast::{self, *};
+use crate::{
+    ast::{self, *},
+    ir_enhance::tools,
+};
 
 use super::{
-    semantic_analysis,
-    symbol_table::{self, SymbolTable},
+    semantic_analysis::{self, const_calculate},
+    symbol_table::{self, Symbol, SymbolTable},
 };
+
+struct IRFunc {
+    function: Function,
+    has_return: bool,
+    parameters: Vec<(String, Value)>,
+}
 
 struct IRGenerator {
     program: Program,
-    function: Option<Function>,
+    // only in, not out
+    // current one is last one
+    functions: Vec<IRFunc>,
     // first in, last out
     // the last one is current block
     blocks: Vec<BasicBlock>,
@@ -27,6 +43,8 @@ struct IRGenerator {
     // when exit a symbol table, pop it
     // when search a symbol, start from the tail
     symbol_tables: Vec<SymbolTable>,
+    // contains global symbol, like func name
+    global_symbol_table: SymbolTable,
 
     // for if elsed
     // contains: (then_block, else_block, end_block)
@@ -38,16 +56,24 @@ struct IRGenerator {
     while_stack: Vec<(BasicBlock, BasicBlock, BasicBlock)>,
 }
 
+#[derive(PartialEq)]
+enum AddFuncType {
+    Define,
+    Decl,
+}
+
 impl IRGenerator {
     fn new() -> Self {
         Self {
             program: Program::new(),
-            function: Option::None,
+            functions: Vec::new(),
             blocks: Vec::new(),
             return_values: Vec::new(),
             ast_node_kind_stack: Vec::new(),
 
             symbol_tables: vec![SymbolTable::new()],
+            global_symbol_table: SymbolTable::new(),
+
             if_else_then_count: 0,
             if_else_then_stack: Vec::new(),
 
@@ -66,6 +92,15 @@ impl IRGenerator {
             .expect("should have ast node kind")
     }
 
+    fn ast_kind_stack_first_n_is(&self, kinds: Vec<AstNodeKind>) -> bool {
+        for (k1, k2) in self.ast_node_kind_stack.iter().zip(kinds.iter()) {
+            if k1 != k2 {
+                return false;
+            }
+        }
+        true
+    }
+
     fn ast_kind_stack_has(&self, kind: AstNodeKind) -> bool {
         self.ast_node_kind_stack.contains(&kind)
     }
@@ -74,6 +109,49 @@ impl IRGenerator {
         self.ast_node_kind_stack
             .last()
             .map_or(false, |k| *k == kind)
+    }
+
+    /// last 1 means last one
+    fn ast_kind_stack_check_last_n(&self, n: usize, kind: AstNodeKind) -> bool {
+        let index = self.ast_node_kind_stack.len() - n;
+        self.ast_node_kind_stack
+            .get(index)
+            .map_or(false, |k| *k == kind)
+    }
+
+    fn add_library_function(&mut self) {
+        let get_int = FunctionData::new_decl("@getint".to_owned(), Vec::new(), Type::get_i32());
+        let get_ch = FunctionData::new_decl("@getch".to_owned(), Vec::new(), Type::get_i32());
+        let get_array = FunctionData::new_decl(
+            "@getarray".to_owned(),
+            vec![Type::get_pointer(Type::get_i32())],
+            Type::get_i32(),
+        );
+
+        let put_int = FunctionData::new_decl(
+            "@putint".to_owned(),
+            vec![Type::get_i32()],
+            Type::get_unit(),
+        );
+        let put_ch =
+            FunctionData::new_decl("@putch".to_owned(), vec![Type::get_i32()], Type::get_unit());
+        let put_array = FunctionData::new_decl(
+            "@putarray".to_owned(),
+            vec![Type::get_i32(), Type::get_pointer(Type::get_i32())],
+            Type::get_unit(),
+        );
+
+        let start_time =
+            FunctionData::new_decl("@start_time".to_owned(), Vec::new(), Type::get_unit());
+        let stop_time =
+            FunctionData::new_decl("@stop_time".to_owned(), Vec::new(), Type::get_unit());
+
+        let func_datas = vec![
+            get_int, get_ch, get_array, put_int, put_ch, put_array, start_time, stop_time,
+        ];
+        for func_data in func_datas {
+            self.new_function(func_data, vec![], AddFuncType::Decl);
+        }
     }
 }
 
@@ -100,11 +178,19 @@ impl IRGenerator {
                 return Some(symbol);
             }
         }
-        None
+        self.global_symbol_table.get_symbol(name)
     }
 
-    fn insert_const(&mut self, name: String, value: i32) {
-        self.current_symbol_table().insert_const(name, value);
+    /// not update global symbol table
+    fn update_symbol(&mut self, name: String, symbol: Symbol) -> Option<Symbol> {
+        for symbol_table in self.symbol_tables.iter_mut().rev() {
+            let has_symbol = symbol_table.get_symbol(&name).is_some();
+            if has_symbol {
+                let old_symbol = symbol_table.insert_symbol(name, symbol).unwrap();
+                return Some(old_symbol);
+            }
+        }
+        None
     }
 
     fn get_const(&self, name: &str) -> Option<i32> {
@@ -113,11 +199,7 @@ impl IRGenerator {
                 return Some(symbol);
             }
         }
-        None
-    }
-
-    fn insert_var(&mut self, name: String, value: Value) {
-        self.current_symbol_table().insert_var(name, value);
+        self.global_symbol_table.get_const(name)
     }
 
     fn get_var(&mut self, name: &str) -> Option<Value> {
@@ -126,7 +208,7 @@ impl IRGenerator {
                 return Some(symbol);
             }
         }
-        None
+        self.global_symbol_table.get_var(name)
     }
 }
 
@@ -141,6 +223,10 @@ impl IRGenerator {
 
     fn append_return_value(&mut self, value: Value) {
         self.return_values.push(value);
+    }
+
+    fn clean_return_value(&mut self) {
+        self.return_values.clear();
     }
 }
 
@@ -193,19 +279,45 @@ impl IRGenerator {
     }
 }
 
+/// for function
+impl IRGenerator {
+    fn current_func_data(&mut self) -> &mut FunctionData {
+        let function = self.functions.last().expect("function not found");
+
+        self.program.func_mut(function.function)
+    }
+
+    fn current_ir_func(&mut self) -> &mut IRFunc {
+        self.functions.last_mut().expect("function not found")
+    }
+
+    fn new_function(
+        &mut self,
+        func_data: FunctionData,
+        params: Vec<(String, Value)>,
+        add_func_type: AddFuncType,
+    ) {
+        let func_name = func_data.name().to_string();
+        let func = self.program.new_func(func_data);
+
+        self.global_symbol_table
+            .insert_symbol(func_name, Symbol::Func(func));
+        let ir_func = IRFunc {
+            function: func,
+            has_return: false,
+            parameters: params,
+        };
+
+        if add_func_type == AddFuncType::Define {
+            self.functions.push(ir_func);
+        }
+    }
+}
+
 /// Adapt to the koopa IR
 impl IRGenerator {
-    fn func_data(&mut self) -> &mut FunctionData {
-        self.program
-            .func_mut(self.function.expect("function not found"))
-    }
-
-    fn new_function(&mut self, func_data: FunctionData) {
-        self.function = Some(self.program.new_func(func_data));
-    }
-
     fn new_block(&mut self, name: Option<String>) -> BasicBlock {
-        let func_data = self.func_data();
+        let func_data = self.current_func_data();
         let bb = func_data.dfg_mut().new_bb().basic_block(name);
         let _ = func_data.layout_mut().bbs_mut().push_key_back(bb);
         bb
@@ -231,7 +343,7 @@ impl IRGenerator {
 
     fn extend<I: IntoIterator<Item = Value>>(&mut self, iter: I) {
         let bb = self.current_block();
-        self.func_data()
+        self.current_func_data()
             .layout_mut()
             .bb_mut(bb)
             .insts_mut()
@@ -243,15 +355,19 @@ impl IRGenerator {
         bb: BasicBlock,
         iter: I,
     ) {
-        self.func_data()
+        self.current_func_data()
             .layout_mut()
             .bb_mut(bb)
             .insts_mut()
             .extend(iter);
     }
 
+    fn global_new_value(&mut self) -> GlobalBuilder {
+        self.program.new_value()
+    }
+
     fn new_value(&mut self) -> LocalBuilder {
-        self.func_data().dfg_mut().new_value()
+        self.current_func_data().dfg_mut().new_value()
     }
 }
 
@@ -265,6 +381,15 @@ fn common_expression(generator: &mut IRGenerator, op: impl Into<BinaryOp>) {
 }
 
 fn exp_ir_generate(generator: &mut IRGenerator, ast: &AstNode) {
+    if generator.ast_kind_stack_first_n_is(vec![AstNodeKind::CompUnit, AstNodeKind::VarDecl]) {
+        // for top level var define, need to skip it
+        return;
+    }
+    if generator.ast_kind_stack_has(AstNodeKind::ConstDecl) {
+        // expression in const decl shouldn't generate ir
+        return;
+    }
+    // need to ignore top level expression
     if !ast.get_kind().is_expression() {
         return;
     }
@@ -327,6 +452,28 @@ fn exp_ir_generate(generator: &mut IRGenerator, ast: &AstNode) {
                     generator.append_return_value(not);
                 }
             },
+            UnaryExp::FuncCall(func_call) => {
+                let want_len = func_call.args.len();
+                assert!(generator.return_values.len() >= want_len);
+                let want_index = generator.return_values.len() - want_len;
+
+                let args: Vec<_> = generator.return_values.split_off(want_index);
+                let func_name = tools::turn_into_ir_name(&func_call.ident);
+                let function = match generator
+                    .global_symbol_table
+                    .get_symbol(&func_name)
+                    .expect("function not found")
+                    .clone()
+                {
+                    Symbol::Func(function) => function,
+                    _ => unreachable!("function not found"),
+                };
+                let call = generator.new_value().call(function, args);
+
+                generator.extend([call]);
+
+                generator.append_return_value(call);
+            }
             _ => {}
         },
         AstNode::PrimaryExp(_) => {}
@@ -342,12 +489,25 @@ fn exp_ir_generate(generator: &mut IRGenerator, ast: &AstNode) {
                     .expect(format!("should define {}", name.ident).as_str())
                     .clone();
                 let value = match symbol {
-                    super::symbol_table::Symbol::Const(value) => {
-                        generator.new_value().integer(value)
-                    }
-                    super::symbol_table::Symbol::Var(variable) => {
+                    symbol_table::Symbol::Const(value) => generator.new_value().integer(value),
+                    symbol_table::Symbol::Var(variable) => {
                         let load = generator.new_value().load(variable);
                         generator.extend([load]);
+                        load
+                    }
+                    symbol_table::Symbol::Func(_) => {
+                        unreachable!("cannot use func in expression except function call")
+                    }
+                    Symbol::FuncParam(func_param) => {
+                        // for func param, need to alloc a variable
+                        // then load data from func_param to this variable
+                        let alloc = generator.new_value().alloc(Type::get_i32());
+                        let store = generator.new_value().store(func_param, alloc);
+                        // update the symbol table
+                        generator.update_symbol(name.ident.clone(), Symbol::Var(alloc));
+
+                        let load = generator.new_value().load(alloc);
+                        generator.extend([alloc, store, load]);
                         load
                     }
                 };
@@ -361,29 +521,62 @@ fn exp_ir_generate(generator: &mut IRGenerator, ast: &AstNode) {
 
 pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
     let mut generator = IRGenerator::new();
+    generator.add_library_function();
 
     let sink = &mut |s: &ast::TraversalStep| {
         if let ast::TraversalStep::Enter(enter) = s {
             generator.append_ast_kind(enter.get_kind());
             match enter {
                 AstNode::FuncDef(func_def) => {
+                    let params: Vec<(Option<String>, Type)> = func_def
+                        .func_f_params
+                        .iter()
+                        .map(|x| x.clone().into())
+                        .collect();
+
                     let func_data = FunctionData::with_param_names(
                         "@".to_owned() + &func_def.ident,
-                        vec![],
-                        Type::get_i32(),
+                        params,
+                        func_def.func_type.clone().into(),
                     );
+                    let mut parameters = Vec::new();
+                    for (param, value) in func_def.func_f_params.iter().zip(func_data.params()) {
+                        parameters.push((param.ident.to_owned(), value.clone()));
+                    }
+                    generator.new_function(func_data, parameters, AddFuncType::Define);
 
-                    generator.new_function(func_data);
                     generator.new_block_and_append(Some("@entry".to_owned()));
                 }
                 AstNode::Block(_) => {
                     generator.new_current_symbol_table();
+                    if generator.ast_kind_stack_check_last_n(2, AstNodeKind::FuncDef) {
+                        // for func def, need to add parameter to symbol table
+                        let mut param_vector = Vec::new();
+                        for (param, value) in generator.current_ir_func().parameters.iter() {
+                            param_vector.push((param.clone(), value.clone()));
+                        }
+
+                        while let Some((param, value)) = param_vector.pop() {
+                            generator
+                                .current_symbol_table()
+                                .insert_symbol(param, Symbol::FuncParam(value));
+                        }
+                    }
                 }
                 AstNode::ConstDecl(const_decl) => {
-                    semantic_analysis::const_calculate(
-                        *const_decl,
-                        generator.current_symbol_table(),
-                    );
+                    // last 1: ConstDecl
+                    // last 2: Block or CompUnit
+                    if generator.ast_kind_stack_check_last_n(2, AstNodeKind::Block) {
+                        semantic_analysis::const_calculate(
+                            *const_decl,
+                            generator.current_symbol_table(),
+                        );
+                    } else {
+                        semantic_analysis::const_calculate(
+                            *const_decl,
+                            &mut generator.global_symbol_table,
+                        );
+                    }
                 }
                 AstNode::Stmt(Stmt::IfElseStmt(_, _, _)) => {
                     generator.push_if_else();
@@ -415,24 +608,47 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
         if let TraversalStep::Leave(leave) = s {
             generator.pop_ast_kind();
             match leave {
+                AstNode::FuncDef(_) => {
+                    if !generator.current_ir_func().has_return {
+                        let ret = generator.new_value().ret(None);
+                        generator.extend([ret]);
+                    }
+                }
+                AstNode::BlockItem(_) => {
+                    // TODO, need to make sure
+                    // need to clean return value
+                    generator.clean_return_value();
+                }
                 AstNode::Stmt(stmt) => match stmt {
                     Stmt::ReturnExp(_) => {
                         let return_value = generator.pop_return_value_option();
                         let ret = generator.new_value().ret(return_value);
                         generator.extend([ret]);
+                        generator.current_ir_func().has_return = true;
                     }
                     Stmt::AssignStmt(l_val, _) => {
                         let rhs = generator.pop_return_value();
 
                         let lhs_name = &l_val.ident;
-                        let symbol = generator
+                        let lhs_symbol = generator
                             .get_symbol(lhs_name)
-                            .expect(format!("should define {}", lhs_name).as_str());
-                        let dest = match symbol {
-                            super::symbol_table::Symbol::Const(_) => {
+                            .expect(format!("should define {}", lhs_name).as_str())
+                            .clone();
+                        let dest = match lhs_symbol {
+                            Symbol::Const(_) => {
                                 panic!("const cannot be modified");
                             }
-                            super::symbol_table::Symbol::Var(var) => var.clone(),
+                            Symbol::Var(var) => var.clone(),
+                            Symbol::Func(_) => unreachable!("function cannot be modified"),
+                            Symbol::FuncParam(func_param) => {
+                                // for func param, need to alloc a variable
+                                // then load data from func_param to this variable
+                                let alloc = generator.new_value().alloc(Type::get_i32());
+                                let store = generator.new_value().store(func_param, alloc);
+                                generator.extend([alloc, store]);
+                                generator.update_symbol(lhs_name.clone(), Symbol::Var(alloc));
+                                alloc
+                            }
                         };
 
                         let store = generator.new_value().store(rhs, dest);
@@ -508,20 +724,57 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
                     generator.push_block(end_block);
                 }
 
-                AstNode::VarDef(var_def) => match var_def {
-                    decl::VarDef::IdentDefine(ident) => {
-                        let alloc = generator.new_value().alloc(Type::get_i32());
-                        generator.extend([alloc]);
-                        generator.insert_var(ident.clone(), alloc);
+                AstNode::VarDef(var_def) => {
+                    let in_global = generator.ast_kind_stack_check_last_n(2, AstNodeKind::CompUnit);
+
+                    if in_global {
+                        let (name, init_value) = match var_def {
+                            decl::VarDef::IdentDefine(ident) => (ident, 0),
+                            decl::VarDef::IdentInitVal(ident, init_val) => {
+                                let const_exp = ConstExp {
+                                    exp: init_val.exp.clone(),
+                                };
+                                let mock_const = ConstDecl {
+                                    b_type: decl::BType::Int,
+                                    const_defs: vec![decl::ConstDef {
+                                        ident: ident.clone(),
+                                        const_init_val: ConstInitVal { const_exp },
+                                    }],
+                                };
+                                let mut local_symbol_table = SymbolTable::new();
+                                const_calculate(&mock_const, &mut local_symbol_table);
+                                let init_value = local_symbol_table
+                                    .get_const(&ident)
+                                    .expect("global var should have init value");
+                                (ident, init_value)
+                            }
+                        };
+                        let init_value = generator.global_new_value().integer(init_value);
+                        let alloc = generator.global_new_value().global_alloc(init_value);
+                        generator
+                            .global_symbol_table
+                            .insert_var(name.clone(), alloc);
+                    } else {
+                        match var_def {
+                            decl::VarDef::IdentDefine(ident) => {
+                                let alloc = generator.new_value().alloc(Type::get_i32());
+                                generator.extend([alloc]);
+                                generator
+                                    .current_symbol_table()
+                                    .insert_var(ident.clone(), alloc);
+                            }
+                            decl::VarDef::IdentInitVal(ident, _) => {
+                                let rhs = generator.pop_return_value();
+                                let alloc = generator.new_value().alloc(Type::get_i32());
+                                let store = generator.new_value().store(rhs, alloc);
+                                generator.extend([alloc, store]);
+                                generator
+                                    .current_symbol_table()
+                                    .insert_var(ident.clone(), alloc);
+                            }
+                        }
                     }
-                    decl::VarDef::IdentInitVal(ident, _) => {
-                        let rhs = generator.pop_return_value();
-                        let alloc = generator.new_value().alloc(Type::get_i32());
-                        let store = generator.new_value().store(rhs, alloc);
-                        generator.extend([alloc, store]);
-                        generator.insert_var(ident.clone(), alloc);
-                    }
-                },
+                }
                 AstNode::Block(_) => {
                     generator.pop_current_symbol_table();
                 }
@@ -529,10 +782,7 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
                 _ => {}
             }
 
-            // expression in const decl shouldn't generate ir
-            if !generator.ast_kind_stack_has(AstNodeKind::ConstDecl) {
-                exp_ir_generate(&mut generator, leave);
-            }
+            exp_ir_generate(&mut generator, leave);
         }
     };
 

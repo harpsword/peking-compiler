@@ -1,3 +1,5 @@
+use log::info;
+
 pub(crate) struct RiskVCode {
     insts: Vec<String>,
 }
@@ -11,13 +13,25 @@ impl RiskVCode {
         self.insts.push(inst.into());
     }
 
-    pub(crate) fn append_basic(&mut self) {
+    pub(crate) fn function_begin(&mut self, name: &str) {
         self.append("  .text");
-        self.append("  .global main");
+        self.append(format!("  .globl {}", name));
+        self.append(format!("{}:", name));
     }
 
     pub(crate) fn generate_result(self) -> String {
         self.insts.join("\n")
+    }
+
+    pub(crate) fn last_inst_check<V: Into<String>>(&self, inst: V) -> bool {
+        self.insts
+            .last()
+            .map(|s| s.as_str())
+            .map_or(false, |s| s == inst.into())
+    }
+
+    pub(crate) fn pop(&mut self) -> Option<String> {
+        self.insts.pop()
     }
 }
 
@@ -51,6 +65,7 @@ pub(crate) enum Instruction<'a> {
     Or(&'a str, &'a str, &'a str),
 
     Li(&'a str, i32),
+    /// Mov(dst, src)
     Mov(&'a str, &'a str),
 
     /// Sw(dst, src)
@@ -63,6 +78,11 @@ pub(crate) enum Instruction<'a> {
     /// src should be like 0(sp)
     Lw(&'a str, &'a str),
 
+    /// La(dst, src)
+    /// should be La(register, var_name)
+    /// it will load the adress of var_name to register
+    La(&'a str, &'a str),
+
     /// bnez cond, target
     /// if cond != 0, jump to target
     Bnez(&'a str, &'a str),
@@ -70,6 +90,9 @@ pub(crate) enum Instruction<'a> {
     /// j target
     /// Jump to target
     Jump(&'a str),
+
+    /// call func
+    Call(&'a str),
     Ret,
 }
 
@@ -97,11 +120,18 @@ impl<'a> Into<String> for Instruction<'a> {
 
             Instruction::Li(dst, src) => format!("  li {dst}, {src}"),
             Instruction::Mov(dst, src) => format!("  mv {dst}, {src}"),
-            Instruction::Sw(dst, src) => format!("  sw {src}, {dst}"),
+            Instruction::Sw(dst, src) => {
+                if src == "a10" {
+                    info!("sw a10");
+                }
+                format!("  sw {src}, {dst}")
+            }
             Instruction::Lw(dst, src) => format!("  lw {dst}, {src}"),
+            Instruction::La(dst, src) => format!("  la {dst}, {src}"),
 
             Instruction::Bnez(cond, target) => format!("  bnez {cond}, {target}"),
             Instruction::Jump(target) => format!("  j {target}"),
+            Instruction::Call(target) => format!("  call {target}"),
             Instruction::Ret => format!("  ret"),
         }
     }

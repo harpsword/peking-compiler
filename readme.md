@@ -54,3 +54,53 @@ binaryOp
 6. `<`
 7. `>=`
 8. `<=`
+
+
+# TODO
+
+1. lv8-part1: ir generate
+   1. done, function call
+   2. done, load func parameter, and register it.
+   3. done, void function without return, add 'ret'
+2. lv8-part1: riscv generate
+   1. done, stack calculation
+   2. new function def: need to deal with parameter reading
+   3. call function
+
+
+# run command
+
+```shell
+riscv32-unknown-elf-gcc -o hello example.s
+riscv32-unknown-elf-gcc -o 07 -g 07.S
+
+qemu-riscv32-static -g 1234 -S 07
+
+clang {output} -c -o {obj} -target riscv32-unknown-linux-elf -march=rv32im -mabi=ilp32
+
+clang 07.S -c -g -o 07.o -target riscv32-unknown-linux-elf -march=rv32im -mabi=ilp32
+
+ld.lld 07.o -L /opt/lib/riscv32 -lsysy -o 07
+
+07_fib
+
+0: 0
+1: 1
+2: 1
+3: 2
+4: 3, get 4
+5: 5, get 8
+6: 8
+7: 13
+8: 21
+9: 34
+10: 55
+11-15: 89, 144, 233, 377, 610
+16-20: 987, 1597, 2584, 4181, 6765
+
+$ ./configure --prefix=/opt/riscv --with-arch=rv32im --with-abi=ilp32
+$ sudo make
+
+
+```
+

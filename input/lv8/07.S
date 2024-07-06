@@ -1,0 +1,65 @@
+  .text
+  .globl fib
+fib:
+  addi sp, sp, -64
+  sw ra, 60(sp)
+  sw a0, 0(sp)
+  lw t0, 0(sp)
+  sw t0, 8(sp)
+  lw t0, 8(sp)
+  li t1, 2
+  slt t2, t0, t1
+  sw t2, 12(sp)
+  lw t0, 12(sp)
+  bnez t0, then0
+  j else0
+then0:
+  lw t0, 0(sp)
+  sw t0, 16(sp)
+  lw a0, 16(sp)
+  ret
+  j end0
+else0:
+end0:
+  lw t0, 0(sp)
+  sw t0, 20(sp)
+  lw t0, 20(sp)
+  li t1, 1
+  sub t2, t0, t1
+  sw t2, 24(sp)
+  lw t0, 24(sp)
+  mv a0, t0
+  call fib
+  sw a0, 28(sp)
+  lw t0, 0(sp)
+  sw t0, 32(sp)
+  lw t0, 32(sp)
+  li t1, 2
+  sub t2, t0, t1
+  sw t2, 36(sp)
+  lw t0, 36(sp)
+  mv a0, t0
+  call fib
+  sw a0, 40(sp)
+  lw t0, 28(sp)
+  lw t1, 40(sp)
+  add t2, t0, t1
+  sw t2, 44(sp)
+  lw a0, 44(sp)
+  lw ra, 60(sp)
+  addi sp, sp, 64
+  ret
+
+  .text
+  .globl main
+main:
+  addi sp, sp, -16
+  sw ra, 12(sp)
+  li t0, 20
+  mv a0, t0
+  call fib
+  sw a0, 0(sp)
+  lw a0, 0(sp)
+  lw ra, 12(sp)
+  addi sp, sp, 16
+  ret

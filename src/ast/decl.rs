@@ -1,4 +1,5 @@
 use env_logger::init;
+use koopa::ir::Type;
 
 use super::{AstNode, Exp, Traversal, TraversalStep};
 
@@ -22,6 +23,14 @@ impl Traversal for ConstDecl {
 #[derive(Debug, Clone)]
 pub enum BType {
     Int,
+}
+
+impl Into<Type> for BType {
+    fn into(self) -> Type {
+        match self {
+            BType::Int => Type::get_i32(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -76,6 +85,7 @@ impl Traversal for VarDecl {
         for var_def in self.var_defs.iter() {
             var_def.traversal(sink);
         }
+        sink(&TraversalStep::Leave(AstNode::VarDecl(self)));
     }
 }
 

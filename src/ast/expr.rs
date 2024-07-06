@@ -3,7 +3,7 @@ use koopa::ir::{builder_traits::*, *};
 
 use super::{AstNode, Traversal, TraversalStep};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Exp {
     pub l_or_exp: Box<LOrExp>,
 }
@@ -16,7 +16,7 @@ impl Traversal for Exp {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LOrExp {
     LAndExp(Box<LAndExp>),
     // op always be "||"
@@ -37,7 +37,7 @@ impl Traversal for LOrExp {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum LAndExp {
     EqExp(Box<EqExp>),
     // op always be "&&"
@@ -58,7 +58,7 @@ impl Traversal for LAndExp {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum EqExp {
     RelExp(Box<RelExp>),
     EqExpOpRelExp(Box<EqExp>, EqExpOp, Box<RelExp>),
@@ -93,7 +93,7 @@ impl Into<BinaryOp> for EqExpOp {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RelExp {
     AddExp(Box<AddExp>),
     RelExpOpAddExp(Box<RelExp>, RelExpOp, Box<AddExp>),
@@ -132,7 +132,7 @@ impl Into<BinaryOp> for RelExpOp {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AddExp {
     MulExp(Box<MulExp>),
     AddExpOpMulExp(Box<AddExp>, AddOp, Box<MulExp>),
@@ -152,7 +152,7 @@ impl Traversal for AddExp {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum MulExp {
     UnaryExp(Box<UnaryExp>),
 
@@ -205,17 +205,18 @@ impl Into<BinaryOp> for AddOp {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UnaryOp {
     Plus,
     Minus,
     Not,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum UnaryExp {
     PrimaryExp(Box<PrimaryExp>),
     UnaryOpAndExp(UnaryOp, Box<UnaryExp>),
+    FuncCall(Box<FuncCall>),
 }
 
 impl Traversal for UnaryExp {
@@ -226,12 +227,29 @@ impl Traversal for UnaryExp {
             UnaryExp::UnaryOpAndExp(op, exp) => {
                 exp.traversal(sink);
             }
+            UnaryExp::FuncCall(func_call) => func_call.traversal(sink),
         }
         sink(&TraversalStep::Leave(AstNode::UnaryExp(self)));
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+pub struct FuncCall {
+    pub ident: String,
+    pub args: Vec<Box<Exp>>,
+}
+
+impl Traversal for FuncCall {
+    fn traversal(&self, sink: &mut dyn FnMut(&TraversalStep)) {
+        sink(&TraversalStep::Enter(AstNode::FuncCall(self)));
+        for arg in self.args.iter() {
+            arg.traversal(sink);
+        }
+        sink(&TraversalStep::Leave(AstNode::FuncCall(self)));
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum PrimaryExp {
     // ( Expr )
     Exp(Box<Exp>),
@@ -256,7 +274,7 @@ impl Traversal for PrimaryExp {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LVal {
     pub ident: String,
 }

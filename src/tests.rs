@@ -19,8 +19,8 @@ mod test {
         env_logger::init_from_env(env);
 
         let mode = "-koopa".to_owned();
-        // let input = "input/lv5/2.c".to_owned();
-        let input = "input/lv7/if_break.c".to_owned();
+        let input = "input/lv8/11_short_circuit.c".to_owned();
+        // let input = "input/lv8/3.c".to_owned();
         let mut parser = SysyCompiler::new(input.into()).unwrap();
 
         parser.generate_ast();
