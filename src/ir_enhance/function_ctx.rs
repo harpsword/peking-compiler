@@ -1,14 +1,12 @@
 use koopa::ir::{BasicBlock, FunctionData, Program, TypeKind, ValueKind};
 use log::info;
 
-
 pub(crate) struct FuncCtx<'a> {
     pub stack_result: FuncStackSizeCalculationResult,
     pub func_data: &'a FunctionData,
 }
 
 impl<'a> FuncCtx<'a> {
-    
     pub(crate) fn new(func_data: &'a FunctionData) -> Self {
         Self {
             func_data: func_data,
@@ -19,7 +17,7 @@ impl<'a> FuncCtx<'a> {
     pub(crate) fn is_decl_func(&self) -> bool {
         self.func_data.layout().entry_bb().is_none()
     }
-    
+
     pub(crate) fn get_name(&self) -> &str {
         let func_name = self.func_data.name();
         if func_name.starts_with("@") {
@@ -40,10 +38,7 @@ impl<'a> FuncCtx<'a> {
     }
 
     /// calculate the stack size of a function
-    pub fn func_stack_size_calculation(
-        &mut self,
-        program: &Program,
-    ) {
+    pub fn func_stack_size_calculation(&mut self, program: &Program) {
         let func_data: &FunctionData = self.func_data;
         let mut size = 0;
         let mut ra_space = 0;
@@ -83,7 +78,11 @@ impl<'a> FuncCtx<'a> {
             need_save_ra: ra_space > 0,
         };
 
-        info!("func: {}, calculation result: {:?}", self.get_name(), self.stack_result);
+        info!(
+            "func: {}, calculation result: {:?}",
+            self.get_name(),
+            self.stack_result
+        );
     }
 }
 

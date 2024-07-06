@@ -8,8 +8,8 @@ use once_cell::sync::Lazy;
 
 use crate::riscv::{Instruction, RiskVCode};
 
-pub(crate) mod ir_builder;
 pub(crate) mod function_ctx;
+pub(crate) mod ir_builder;
 
 pub(crate) fn generate_riscv(program: Program) -> String {
     let generator = RiscvGenerator::new();
@@ -248,7 +248,7 @@ impl RiscvGenerator {
                 self.generate_riscv_for_instruction(program, &func_ctx, inst);
             }
         }
-        
+
         self.result.append("");
 
         self.stack_manager.reset();
@@ -264,8 +264,7 @@ impl RiscvGenerator {
         value: Value,
         stack_load_to_register: bool,
     ) -> String {
-        let value = self
-            .generate_riscv_for_instruction(program, func_ctx, value);
+        let value = self.generate_riscv_for_instruction(program, func_ctx, value);
 
         if value.is_none() {
             info!("test");
@@ -282,16 +281,15 @@ impl RiscvGenerator {
                 } else {
                     return value.to_string();
                 }
-            },
+            }
             InstructionResult::Var(ref var_register) if stack_load_to_register => {
                 let var_register = var_register.clone();
                 let value_str = value.to_string();
-                self.result.append(Instruction::Lw(&var_register, &value_str));
+                self.result
+                    .append(Instruction::Lw(&var_register, &value_str));
                 var_register.clone()
-            },
-            InstructionResult::Var(_) => {
-                value.to_string()
             }
+            InstructionResult::Var(_) => value.to_string(),
         }
     }
 
@@ -320,15 +318,13 @@ impl RiscvGenerator {
             ValueKind::FuncArgRef(func_arg_ref) => {
                 let index = func_arg_ref.index();
                 let result = if (index < 8) {
-                    InstructionResult::Register(
-                        Self::get_func_arg_register(func_arg_ref.index()),
-                    )
+                    InstructionResult::Register(Self::get_func_arg_register(func_arg_ref.index()))
                 } else {
-                    let offset = func_ctx.stack_result.stack_size + (index-8)*4;
+                    let offset = func_ctx.stack_result.stack_size + (index - 8) * 4;
                     InstructionResult::Stack(offset)
                 };
                 Some(result)
-            },
+            }
             ValueKind::Alloc(_) => {
                 let dst = self.stack_manager.assign(size);
                 dst.map(|x| InstructionResult::Stack(x))
@@ -336,7 +332,8 @@ impl RiscvGenerator {
             ValueKind::GlobalAlloc(global_alloc) => {
                 let global_var_name = self.get_global_var_name(&value);
                 let register = self.assign_register();
-                self.result.append(Instruction::La(&register, &global_var_name));
+                self.result
+                    .append(Instruction::La(&register, &global_var_name));
                 // never finished, need to load var address to register again
                 is_finished = false;
 
@@ -393,10 +390,14 @@ impl RiscvGenerator {
 
                 if func_ctx.stack_result.need_save_ra {
                     self.result
-                .append(Instruction::Lw("ra", &format!("{}(sp)", stack_size - 4)));
+                        .append(Instruction::Lw("ra", &format!("{}(sp)", stack_size - 4)));
                 }
                 if stack_size > 0 {
-                    self.result.append(Instruction::Addi("sp", "sp", stack_size.try_into().unwrap()));
+                    self.result.append(Instruction::Addi(
+                        "sp",
+                        "sp",
+                        stack_size.try_into().unwrap(),
+                    ));
                 }
                 self.result.append(Instruction::Ret);
 
@@ -505,10 +506,12 @@ impl RiscvGenerator {
             ValueKind::Branch(branch) => {
                 let cond = self.load_value(program, func_ctx, branch.cond(), true);
 
-                let then_bb =
-                    func_ctx.get_bb_name(branch.true_bb()).expect("then bb should have name");
-                let else_bb =
-                func_ctx.get_bb_name(branch.false_bb()).expect("else bb should have name");
+                let then_bb = func_ctx
+                    .get_bb_name(branch.true_bb())
+                    .expect("then bb should have name");
+                let else_bb = func_ctx
+                    .get_bb_name(branch.false_bb())
+                    .expect("else bb should have name");
 
                 self.result.append(Instruction::Bnez(&cond, then_bb));
                 self.result.append(Instruction::Jump(else_bb));
@@ -517,7 +520,8 @@ impl RiscvGenerator {
                 None
             }
             ValueKind::Jump(jump) => {
-                let target_bb =func_ctx.get_bb_name(jump.target())
+                let target_bb = func_ctx
+                    .get_bb_name(jump.target())
                     .expect("jump target bb should have name");
                 self.result.append(Instruction::Jump(target_bb));
 

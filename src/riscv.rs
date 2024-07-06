@@ -125,7 +125,7 @@ impl<'a> Into<String> for Instruction<'a> {
                     info!("sw a10");
                 }
                 format!("  sw {src}, {dst}")
-            },
+            }
             Instruction::Lw(dst, src) => format!("  lw {dst}, {src}"),
             Instruction::La(dst, src) => format!("  la {dst}, {src}"),
 
