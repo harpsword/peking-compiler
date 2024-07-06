@@ -248,20 +248,7 @@ impl RiscvGenerator {
                 self.generate_riscv_for_instruction(program, &func_ctx, inst);
             }
         }
-
-        if self.result.last_inst_check(Instruction::Ret) {
-            // last one is ret, need to pop it and add epilogue first
-            _ = self.result.pop();
-        }
-        // epilogue
-        if calculation_result.need_save_ra {
-            self.result
-                .append(Instruction::Lw("ra", &format!("{}(sp)", size - 4)));
-        }
-        if size > 0 {
-            self.result.append(Instruction::Addi("sp", "sp", size));
-        }
-        self.result.append(Instruction::Ret);
+        
         self.result.append("");
 
         self.stack_manager.reset();
@@ -401,6 +388,15 @@ impl RiscvGenerator {
                             self.result.append(Instruction::Lw("a0", &src.to_string()));
                         }
                     }
+                }
+                let stack_size = func_ctx.stack_result.stack_size;
+
+                if func_ctx.stack_result.need_save_ra {
+                    self.result
+                .append(Instruction::Lw("ra", &format!("{}(sp)", stack_size - 4)));
+                }
+                if stack_size > 0 {
+                    self.result.append(Instruction::Addi("sp", "sp", stack_size.try_into().unwrap()));
                 }
                 self.result.append(Instruction::Ret);
 
