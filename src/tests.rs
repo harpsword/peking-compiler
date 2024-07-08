@@ -20,7 +20,7 @@ mod test {
 
         let mode = "-koopa".to_owned();
         let input = "input/lv8/11_short_circuit.c".to_owned();
-        // let input = "input/lv8/3.c".to_owned();
+        // let input = "input/lv6/5_more_logical.c".to_owned();
         let mut parser = SysyCompiler::new(input.into()).unwrap();
 
         parser.generate_ast();

@@ -1,16 +1,15 @@
 use core::panic;
-use std::process::id;
 
 use decl::{ConstDecl, ConstExp, ConstInitVal};
 use expr::{AddExp, EqExp, LAndExp, LOrExp, MulExp, RelExp, UnaryExp};
 use koopa::ir::{
     builder::{
-        BasicBlockBuilder, GlobalBuilder, GlobalInstBuilder, LocalBuilder, LocalInstBuilder,
-        ValueBuilder, ValueInserter,
+        BasicBlockBuilder, EntityInfoQuerier, GlobalBuilder, GlobalInstBuilder, LocalBuilder,
+        LocalInstBuilder, ValueBuilder,
     },
-    entities::ValueData,
     BasicBlock, BinaryOp, Function, FunctionData, Program, Type, Value,
 };
+use log::info;
 
 use crate::{
     ast::{self, *},
@@ -245,6 +244,7 @@ impl IRGenerator {
         self.if_else_then_stack.pop();
     }
 
+    // return (then, else, end)
     fn current_if_else_then(&mut self) -> (BasicBlock, BasicBlock, BasicBlock) {
         self.if_else_then_stack
             .last()
@@ -380,6 +380,7 @@ fn common_expression(generator: &mut IRGenerator, op: impl Into<BinaryOp>) {
     generator.append_return_value(or);
 }
 
+// execute at leave
 fn exp_ir_generate(generator: &mut IRGenerator, ast: &AstNode) {
     if generator.ast_kind_stack_first_n_is(vec![AstNodeKind::CompUnit, AstNodeKind::VarDecl]) {
         // for top level var define, need to skip it
@@ -394,19 +395,88 @@ fn exp_ir_generate(generator: &mut IRGenerator, ast: &AstNode) {
         return;
     }
     match ast {
-        AstNode::LOrExp(exp) => match exp {
-            LOrExp::LOrExpOpLAndExp(_, _) => {
-                common_expression(generator, BinaryOp::Or);
-            }
-            _ => {}
-        },
+        AstNode::LOrExp(exp) => {
+            // delay deal with LOrExp->LOrExpOpLAndExp(LOrExp, LAndExp)'s left one
+            if generator.ast_kind_stack_check_last(AstNodeKind::LOrExp) {
+                let (then_block, else_block, end_block) = generator.current_if_else_then();
+                let lhs = generator.pop_return_value();
+                let br = generator.new_value().branch(lhs, then_block, else_block);
+                generator.extend([br]);
 
-        AstNode::LAndExp(exp) => match exp {
-            LAndExp::LAndExpOpEqExp(_, _) => {
-                common_expression(generator, BinaryOp::And);
+                // deal with then block
+                let jump = generator.new_value().jump(end_block);
+                generator.extend_to_specified_block(then_block, [jump]);
+
+                generator.pop_block();
+                generator.push_block(end_block);
+                generator.push_block(else_block);
             }
-            _ => {}
-        },
+            match exp {
+                LOrExp::LOrExpOpLAndExp(_, _) => {
+                    let rhs = generator.pop_return_value();
+                    let alloc = generator.pop_return_value();
+                    let (_, _, end_block) = generator.current_if_else_then();
+
+                    // deal with else block
+                    let zero = generator.new_value().integer(0);
+                    let not_eq_0 = generator.new_value().binary(BinaryOp::NotEq, rhs, zero);
+                    let assign2 = generator.new_value().store(not_eq_0, alloc);
+                    let jump = generator.new_value().jump(end_block);
+                    generator.extend([not_eq_0, assign2, jump]);
+
+                    generator.pop_if_else();
+                    // pop else_block
+                    generator.pop_block();
+                    let load = generator.new_value().load(alloc);
+                    generator.extend([load]);
+
+                    generator.append_return_value(load);
+                }
+                LOrExp::LAndExp(_) => {}
+            }
+        }
+
+        AstNode::LAndExp(exp) => {
+            // delay deal with LAndExp->LAndExpOpEqExp(LAndExp, EqExp)
+            if generator.ast_kind_stack_check_last(AstNodeKind::LAndExp) {
+                let (then_block, else_block, end_block) = generator.current_if_else_then();
+                let lhs = generator.pop_return_value();
+                let br = generator.new_value().branch(lhs, then_block, else_block);
+                generator.extend([br]);
+
+                generator.pop_block();
+                generator.push_block(end_block);
+                generator.push_block(then_block);
+            }
+
+            match exp {
+                LAndExp::EqExp(_) => {}
+                LAndExp::LAndExpOpEqExp(_, _) => {
+                    let rhs = generator.pop_return_value();
+                    let alloc = generator.pop_return_value();
+                    let (_, else_block, end_block) = generator.current_if_else_then();
+
+                    // deal with then block
+                    let zero = generator.new_value().integer(0);
+                    let not_eq_0 = generator.new_value().binary(BinaryOp::NotEq, rhs, zero);
+                    let assign2 = generator.new_value().store(not_eq_0, alloc);
+                    let jump = generator.new_value().jump(end_block);
+                    generator.extend([not_eq_0, assign2, jump]);
+
+                    // pop then block
+                    generator.pop_block(); 
+                    // deal with else block
+                    let jump = generator.new_value().jump(end_block);
+                    generator.extend_to_specified_block(else_block, [jump]);
+
+                    generator.pop_if_else();
+                    let load = generator.new_value().load(alloc);
+                    generator.extend([load]);
+
+                    generator.append_return_value(load);
+                }
+            }
+        }
         AstNode::EqExp(exp) => match exp {
             EqExp::EqExpOpRelExp(_, op, _) => {
                 common_expression(generator, op.clone());
@@ -598,6 +668,30 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
                     let (_, else_block, _) = generator.current_if_else_then();
                     generator.push_block(else_block);
                 }
+                AstNode::LOrExp(exp) => match exp {
+                    LOrExp::LAndExp(_) => {}
+                    LOrExp::LOrExpOpLAndExp(_, _) => {
+                        generator.push_if_else();
+                        let alloc = generator.new_value().alloc(Type::get_i32());
+                        let init = generator.new_value().integer(1);
+                        let assign = generator.new_value().store(init, alloc);
+                        generator.extend([alloc, assign]);
+
+                        generator.append_return_value(alloc);
+                    }
+                },
+                AstNode::LAndExp(exp) => match exp {
+                    LAndExp::EqExp(_) => {}
+                    LAndExp::LAndExpOpEqExp(_, _) => {
+                        generator.push_if_else();
+                        let alloc = generator.new_value().alloc(Type::get_i32());
+                        let init = generator.new_value().integer(0);
+                        let assign = generator.new_value().store(init, alloc);
+                        generator.extend([alloc, assign]);
+
+                        generator.append_return_value(alloc);
+                    }
+                },
                 // TODO change exp to evaluate at this time
                 // and in this time cal exp.traversal function to
                 // calculate it like const calculation
@@ -672,7 +766,12 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
                         let jump = generator.new_value().jump(end_block);
                         generator.extend([jump]);
                     }
-                    Stmt::IfElseStmt(_, _, _) => {
+                    Stmt::IfElseStmt(_, _, then) => {
+                        if then.is_none() {
+                            let (_, then_block, end_block) = generator.current_if_else_then();
+                            let jump = generator.new_value().jump(end_block);
+                            generator.extend_to_specified_block(then_block, [jump]);
+                        }
                         generator.pop_if_else();
                     }
                     Stmt::WhileStmt(_, _) => {
@@ -683,6 +782,9 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
                 AstNode::IfCond(_) => {
                     let origin_block = generator.pop_block().expect("should have origin block");
                     let cond_exp = generator.pop_return_value();
+                    let t = generator.new_value().value_type(cond_exp);
+                    info!("type: {:?}", t);
+
                     let (then_block, else_block, end_block) = generator.current_if_else_then();
                     let br = generator
                         .new_value()
