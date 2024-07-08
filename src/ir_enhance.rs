@@ -1,8 +1,7 @@
-use std::{borrow::Borrow, collections::HashMap, fmt::format, ops::Index, thread::panicking};
+use std::{collections::HashMap};
 
-use env_logger::init;
 use function_ctx::FuncCtx;
-use koopa::ir::{values, Function, FunctionData, Program, TypeKind, Value, ValueKind};
+use koopa::ir::{values, Function, Program, TypeKind, Value, ValueKind};
 use log::info;
 use once_cell::sync::Lazy;
 
