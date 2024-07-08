@@ -1,83 +1,40 @@
-RISC-V: 
-  .text
-  .globl fib
-fib:
-  addi sp, sp, -64
-  sw ra, 60(sp)
 
-  sw a0, 0(sp) // store @n, %0
+fun @main(): i32 {
+@entry:
+  %0 = alloc i32
+  store 0, %0 // @a
+  %1 = alloc i32
+  store 1, %1 // @b
 
-//  %1 = load %0
-  lw t0, 0(sp)
-  sw t0, 8(sp) 
+  %2 = load %0
+  %3 = load %1
 
-// %2 = lt %1, 2
-  lw t0, 8(sp)
-  li t1, 2
-  slt t2, t0, t1
+  %4 = alloc i32
+  store 0, %4
+  br %2, @then1, @else1
 
-  sw t2, 12(sp)
-  lw t0, 12(sp)
-  bnez t0, then0
-  j else0
+@then0:
+  %5 = load %0
+  %6 = load %1
+  %7 = add %5, %6
+  store %7, %0
+  jump @end0
 
-then0:
-  lw t0, 0(sp)
-  sw t0, 16(sp)
-  lw a0, 16(sp)
-  ret
-  j end0
-else0:
-end0:
-  lw t0, 0(sp)
-  sw t0, 20(sp) // %4
+@else0:
 
-  lw t0, 20(sp)
-  li t1, 1
-  sub t2, t0, t1
-  sw t2, 24(sp) // %5
+@end0:
+  %8 = load %0
+  ret %8
 
-  lw t0, 24(sp)
-  mv a0, t0
-  call fib
-  sw a0, 28(sp) // %6
+@then1:
+  %9 = ne %3, 0
+  store %9, %4
+  jump @end1
 
-  lw t0, 0(sp)
-  sw t0, 32(sp) // %7
+@else1:
+  jump @end1
 
-  lw t0, 32(sp)
-  li t1, 2
-  sub t2, t0, t1
-  sw t2, 36(sp) // %8
-
-  lw t0, 36(sp)
-  mv a0, t0
-  call fib
-  sw a0, 40(sp) // %9
-
-  lw t0, 28(sp)
-  lw t1, 40(sp)
-  add t2, t0, t1
-  sw t2, 44(sp) // %10
-  
-  lw a0, 44(sp)
-
-  lw ra, 60(sp)
-  addi sp, sp, 64
-  ret
-
-  .text
-  .globl main
-main:
-  addi sp, sp, -16
-  sw ra, 12(sp)
-
-  li t0, 20
-  mv a0, t0
-  call fib
-  sw a0, 0(sp)
-
-  lw a0, 0(sp)
-  lw ra, 12(sp)
-  addi sp, sp, 16
-  ret
+@end1:
+  %10 = load %4
+  br %10, @then0, @else0
+}

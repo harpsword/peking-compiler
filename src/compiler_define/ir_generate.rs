@@ -5,12 +5,12 @@ use decl::{ConstDecl, ConstExp, ConstInitVal};
 use expr::{AddExp, EqExp, LAndExp, LOrExp, MulExp, RelExp, UnaryExp};
 use koopa::ir::{
     builder::{
-        BasicBlockBuilder, GlobalBuilder, GlobalInstBuilder, LocalBuilder, LocalInstBuilder,
-        ValueBuilder, ValueInserter,
+        BasicBlockBuilder, EntityInfoQuerier, GlobalBuilder, GlobalInstBuilder, LocalBuilder, LocalInstBuilder, ValueBuilder, ValueInserter
     },
     entities::ValueData,
     BasicBlock, BinaryOp, Function, FunctionData, Program, Type, Value,
 };
+use log::info;
 
 use crate::{
     ast::{self, *},
@@ -245,6 +245,7 @@ impl IRGenerator {
         self.if_else_then_stack.pop();
     }
 
+    // return (then, else, end)
     fn current_if_else_then(&mut self) -> (BasicBlock, BasicBlock, BasicBlock) {
         self.if_else_then_stack
             .last()
@@ -396,14 +397,67 @@ fn exp_ir_generate(generator: &mut IRGenerator, ast: &AstNode) {
     match ast {
         AstNode::LOrExp(exp) => match exp {
             LOrExp::LOrExpOpLAndExp(_, _) => {
-                common_expression(generator, BinaryOp::Or);
+                let rhs = generator.pop_return_value();
+                let lhs = generator.pop_return_value();
+                generator.push_if_else();
+                let (then_block, else_block, end_block) = generator.current_if_else_then();
+
+                let alloc = generator.new_value().alloc(Type::get_i32());
+                let init = generator.new_value().integer(1);
+                let assign = generator.new_value().store(init, alloc);
+                let br = generator.new_value().branch(lhs, then_block, else_block);
+                generator.extend([alloc, assign, br]);
+                generator.pop_block();
+
+                let jump = generator.new_value().jump(end_block);
+                generator.extend_to_specified_block(then_block, [jump]);
+
+                let zero = generator.new_value().integer(0);
+                let not_eq_0 = generator.new_value().binary(BinaryOp::NotEq, rhs, zero);
+                let assign2 = generator.new_value().store(not_eq_0, alloc);
+                let jump = generator.new_value().jump(end_block);
+                generator.extend_to_specified_block(else_block, [not_eq_0, assign2, jump]);
+
+                generator.pop_if_else();
+                generator.push_block(end_block);
+                let load = generator.new_value().load(alloc);
+                generator.extend([load]);
+
+                generator.append_return_value(load);
             }
             _ => {}
         },
 
         AstNode::LAndExp(exp) => match exp {
             LAndExp::LAndExpOpEqExp(_, _) => {
-                common_expression(generator, BinaryOp::And);
+                let rhs = generator.pop_return_value();
+                let lhs = generator.pop_return_value();
+                generator.push_if_else();
+                let (then_block, else_block, end_block) = generator.current_if_else_then();
+
+                let alloc = generator.new_value().alloc(Type::get_i32());
+                let init = generator.new_value().integer(0);
+                let assign = generator.new_value().store(init, alloc);
+                let br = generator.new_value().branch(lhs, then_block, else_block);
+                generator.extend([alloc, assign, br]);
+                generator.pop_block();
+
+
+                let zero = generator.new_value().integer(0);
+                let not_eq_0 = generator.new_value().binary(BinaryOp::NotEq, rhs, zero);
+                let assign2 = generator.new_value().store(not_eq_0, alloc);
+                let jump = generator.new_value().jump(end_block);
+                generator.extend_to_specified_block(then_block, [not_eq_0, assign2, jump]);
+
+                let jump = generator.new_value().jump(end_block);
+                generator.extend_to_specified_block(else_block, [jump]);
+
+                generator.pop_if_else();
+                generator.push_block(end_block);
+                let load = generator.new_value().load(alloc);
+                generator.extend([load]);
+
+                generator.append_return_value(load);
             }
             _ => {}
         },
@@ -598,6 +652,18 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
                     let (_, else_block, _) = generator.current_if_else_then();
                     generator.push_block(else_block);
                 }
+                AstNode::LOrExp(exp) => match exp {
+                    LOrExp::LAndExp(_) => {},
+                    LOrExp::LOrExpOpLAndExp(_, _) => {
+                        // generator.push_if_else();
+                        // let (then_block, else_block, end_block) = generator.current_if_else_then();
+
+                        // let alloc = generator.new_value().alloc(Type::get_i32());
+                        // let init = generator.new_value().integer(1);
+                        // let assign = generator.new_value().store(init, alloc);
+                        // generator.extend([alloc, assign]);
+                    },
+                }
                 // TODO change exp to evaluate at this time
                 // and in this time cal exp.traversal function to
                 // calculate it like const calculation
@@ -683,6 +749,9 @@ pub fn ir_generate(ast_node: &ast::CompUnit) -> koopa::ir::Program {
                 AstNode::IfCond(_) => {
                     let origin_block = generator.pop_block().expect("should have origin block");
                     let cond_exp = generator.pop_return_value();
+                    let t = generator.new_value().value_type(cond_exp);
+                    info!("type: {:?}", t);
+
                     let (then_block, else_block, end_block) = generator.current_if_else_then();
                     let br = generator
                         .new_value()
